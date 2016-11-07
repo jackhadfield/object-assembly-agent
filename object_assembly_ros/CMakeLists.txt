@@ -30,8 +30,8 @@ set(CMAKE_MODULE_PATH ${PROJECT_MODULE_PATH})
 
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED)
-#find_package(Eigen REQUIRED)
-set(Eigen_INCLUDE_DIRS "/home/jack/eigen3.2.8")
+find_package(Eigen REQUIRED)
+#set(Eigen_INCLUDE_DIRS "/home/jack/eigen3.2.8")
 #find_package(OpenCV REQUIRED)
 
 include_directories(${Boost_INCLUDE_DIRS})
