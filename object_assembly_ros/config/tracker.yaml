@@ -1,0 +1,6 @@
+tracker_namespace: rms_gaussian_filter_object_tracker
+pose_topic: objects_state
+object_pose_topic: /particle_tracker/objects_state
+surface_params_service: /background_removal/FetchSurfaceParams
+max_particles: 10 #TODO check that this is <= num_particles/num_objects of tracker
+connection_info_list_topic: connection_list

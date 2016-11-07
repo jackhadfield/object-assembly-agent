@@ -1,0 +1,10 @@
+image_topic: /kinect2/hd/image_depth_rect
+camera_info_topic: /kinect2/hd/camera_info
+
+crop_left: 768
+crop_top: 180
+crop_width: 768
+crop_height: 360
+
+convert_to: 32FC1
+scaling_factor: 0.001

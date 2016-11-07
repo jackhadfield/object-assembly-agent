@@ -1,0 +1,37 @@
+#default capture width and height
+#FRAME_WIDTH: 640
+#FRAME_HEIGHT: 480
+#max number of objects to be detected in frame
+MAX_NUM_OBJECTS: 50
+#minimum and maximum object area to be accepted
+MIN_OBJECT_AREA: 50 #100
+MAX_OBJECT_AREA: 204800
+#(FRAME_HEIGHT*FRAME_WIDTH / 1.5)
+erode_size: 2 #3
+dilate_size: 4 #8
+
+crop_range: [205, 71, 205, 141]
+particle_filter_downsampling: 4
+
+show_rgb: 1
+show_hsv: 0
+show_threshold: 0
+use_trackbars: 0
+smooth_estimate: 0
+camera_topic: /kinect2/sd/image_color_rect
+#camera_topic: /webcam/image_raw
+number_of_objects: 4
+
+objects:
+    object1:
+        name: 'Green Box'
+        hsv_range: [86,97,93,175,86,256] #webcam: [62,78,53,117,133,238]
+    object2:
+        name: 'Orange Box'
+        hsv_range: [0,10,11,42,0,256] #webcam: [2,23,81,133,133,256]
+    object3:
+        name: 'White Box'
+        hsv_range: [88,104,16,105,207,256] #first bag-first try:[89,97,44,79,0,256] #webcam:[84,167,15,57,133,256]
+    object4:
+        name: 'Yellow Box'
+        hsv_range: [76,86,15,41,35,256] #(for erode:1). Previously: [66,81,33,49,200,256] #[65,87,36,57,0,256] #webcam: [32,60,65,93,172,256]
