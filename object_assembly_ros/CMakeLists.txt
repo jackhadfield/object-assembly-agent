@@ -24,14 +24,17 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_ros
 )
 
+find_package(GLUT REQUIRED)
+find_package(GLEW REQUIRED)
+find_package(OpenGL REQUIRED)
 
 set(PROJECT_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 set(CMAKE_MODULE_PATH ${PROJECT_MODULE_PATH})
 
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED)
-find_package(Eigen REQUIRED)
-#set(Eigen_INCLUDE_DIRS "/home/jack/eigen3.2.8")
+#find_package(Eigen REQUIRED)
+set(Eigen_INCLUDE_DIRS "/home/jack/eigen3.2.8")
 #find_package(OpenCV REQUIRED)
 
 include_directories(${Boost_INCLUDE_DIRS})
@@ -141,6 +144,9 @@ include_directories(
   #include
   include/${PROJECT_NAME}/
   ${catkin_INCLUDE_DIRS}
+  ${OpenGL_INCLUDE_DIRS}
+  ${GLUT_INCLUDE_DIRS}
+  ${GLEW_INCLUDE_DIRS}
 )
 
 file(GLOB_RECURSE headers include/${PROJECT_NAME}/*.hpp
@@ -174,7 +180,6 @@ add_executable(assembly_agent
   src/assembly_agent_node.cpp)
 #add_dependencies(assembly_agent object_assembly_ros_generate_messages_cpp)
 
-#!!! ADD THE NEXT BLOCK WHEN READY !!!
 target_link_libraries(assembly_agent
 #  ${PROJECT_NAME}
   ${catkin_LIBRARIES}
@@ -213,6 +218,54 @@ target_link_libraries(image_crop
   ${catkin_LIBRARIES}
   ${OpenCV_LIBS}
   #${PCL_LIBRARIES}
+  yaml-cpp)
+
+#add_executable(gui_test01
+#  #${headers}
+#  src/guidance_mode_ui.cpp)
+#
+#add_library(shader_utils
+#  src/shader_utils.cpp)
+#
+#target_link_libraries(gui_test01
+#  #${PROJECT_NAME}
+#  ${catkin_LIBRARIES}
+# ${OpenCV_LIBS}
+#  ${OPENGL_LIBRARIES}
+#  ${GLUT_LIBRARY}
+#  ${GLEW_LIBRARY}
+#  shader_utils
+#  #${PCL_LIBRARIES}
+#  yaml-cpp)
+
+add_executable(points_loader
+  #${headers}
+  src/points_loader.cpp)
+
+target_link_libraries(points_loader
+  #${PROJECT_NAME}
+  ${catkin_LIBRARIES}
+  yaml-cpp)
+
+add_executable(guess_mode
+  src/assembly_subtask_guess_mode.cpp
+  src/assembly_task_guess_mode.cpp
+  src/guess_mode.cpp)
+#add_dependencies(assembly_agent object_assembly_ros_generate_messages_cpp)
+
+add_library(guess_mode_ui
+  src/shader_utils.cpp
+  src/guess_mode_ui.cpp)
+
+target_link_libraries(guess_mode
+#  ${PROJECT_NAME}
+  ${catkin_LIBRARIES}
+  #${OpenCV_LIBS}
+  ${OPENGL_LIBRARIES}
+  ${GLUT_LIBRARY}
+  ${GLEW_LIBRARY}
+  guess_mode_ui
+###  ${PCL_LIBRARIES}
   yaml-cpp)
 
 ## Declare a C++ library

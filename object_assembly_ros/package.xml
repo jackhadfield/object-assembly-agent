@@ -13,7 +13,7 @@
   <!-- One license tag required, multiple allowed, one license per tag -->
   <!-- Commonly used license strings: -->
   <!--   BSD, MIT, Boost Software License, GPLv2, GPLv3, LGPLv2.1, LGPLv3 -->
-  <license>GNU GPL</license>
+  <license>TODO</license>
 
 
   <!-- Url tags are optional, but mutiple are allowed, one per tag -->
@@ -53,6 +53,7 @@
   <build_depend>pcl_conversions</build_depend>
   <build_depend>cv_bridge</build_depend>
   <build_depend>pcl_ros</build_depend>
+  <build_depend>OpenGL</build_depend>
   <run_depend>OpenCV</run_depend>
   <run_depend>tf</run_depend>
   <run_depend>dbot_ros_msgs</run_depend>
@@ -66,6 +67,7 @@
   <run_depend>pcl_conversions</run_depend>
   <run_depend>cv_bridge</run_depend>
   <run_depend>pcl_ros</run_depend>
+  <run_depend>OpenGL</run_depend>
 
   
   <build_depend>message_generation</build_depend>
