@@ -1,0 +1,38 @@
+#all distance measures are expressed in meters
+
+image_output_dir: /home/jack/catkin_ws/src/object_assembly_ros/output
+
+number_of_boxes: 10
+
+box_size: 0.12 #edge length
+
+number_of_checks: 2
+
+number_of_sentences: 4
+
+margin: [0.01, 0.01, 0.01, 1.1, 1.1, 1.1, 1.1]
+
+shuffle: true
+flip_view: true
+camera_to_user_transform: [0.0, 0.0, 1.5, 0.0, 1.0, 0.0, 0.0]
+
+sentence1:
+  Spanish: ellos fueron al supermercado ayer
+  English: They went to the supermarket yesterday
+  other_words: ["a", "fuera", "la", "hoy", "iban"] #, "al", "supermercado", "ayer"]
+
+sentence2:
+  Spanish: trabajaba para el gobierno
+  English: I used to work for the government
+  other_words: ["trabajabas", "por", "la", "gobernador", "trabajé", "de"]
+
+sentence3:
+  Spanish: la gente es diferente aquí
+  English: The people are different here
+  other_words: ["el", "está", "diferentes", "allí", "persona"]
+
+sentence4:
+  Spanish: es un pecado matar a un ruiseñor
+  English: It's a sin to kill a mockingbird
+  other_words: ["de", "cambiar", "por"]
+
