@@ -19,7 +19,7 @@ camera_to_user_transform: [0.0, 0.0, 1.5, 0.0, 1.0, 0.0, 0.0]
 sentence1:
   Spanish: ellos fueron al supermercado ayer
   English: They went to the supermarket yesterday
-  other_words: ["a", "fuera", "la", "hoy", "iban"] #, "al", "supermercado", "ayer"]
+  other_words: ["a", "fuera", "la", "hoy", "iban"]
 
 sentence2:
   Spanish: trabajaba para el gobierno
