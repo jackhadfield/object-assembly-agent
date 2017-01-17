@@ -23,6 +23,7 @@ public:
     int gui_main(int argc, char* argv[]);
     static int gui_main_static(int argc, char* argv[]);
     void update_poses(std::vector<tf::Transform> new_poses);
+    void reload_textures();
     //void set_filenames(std::vector<std::string> filenames);
     void load_mesh(const char* filename, Mesh* mesh);
     int init_resources(char* vshader_filename, char* fshader_filename);
@@ -59,7 +60,7 @@ protected:
 
 BaseUI::BaseUI(std::vector<std::string> filenames) : filenames_(filenames)
 {
-    for (int i = 0; i < filenames.size(); i++)
+    for (int i = 0; i < filenames_.size(); i++)
     {
         Mesh new_mesh;
         load_mesh(filenames_[i].c_str(), &new_mesh);
@@ -75,6 +76,15 @@ void BaseUI::update_poses(std::vector<tf::Transform> new_poses)
         double m[16];
         new_poses[i].getOpenGLMatrix(m);
         meshes_[i].object2world = glm::make_mat4(m);
+    }
+}
+
+void BaseUI::reload_textures()
+{
+    std::lock_guard<std::mutex> lock_mutex(mutex_);
+    for (int i = 0; i < meshes_.size(); i++)
+    {
+        meshes_[i].load_new_texture();
     }
 }
 
@@ -157,7 +167,8 @@ int BaseUI::init_resources(char* vshader_filename, char* fshader_filename)
 
     for (int i = 0; i < meshes_.size(); i++)
         meshes_[i].upload();
-    ground.upload();
+    if (!use_png_texture)
+        ground.upload();
     //light_bbox.upload();
 
 
@@ -193,50 +204,76 @@ int BaseUI::init_resources(char* vshader_filename, char* fshader_filename)
         fprintf(stderr, "Could not bind attribute %s\n", attribute_name);
         return 0;
     }
-    attribute_name = "v_normal";
-    attribute_v_normal = glGetAttribLocation(program, attribute_name);
-    if (attribute_v_normal == -1) {
-        fprintf(stderr, "Could not bind attribute %s\n", attribute_name);
-        return 0;
+    if (!use_png_texture)
+    {
+        attribute_name = "v_normal";
+        attribute_v_normal = glGetAttribLocation(program, attribute_name);
+        if (attribute_v_normal == -1) {
+            fprintf(stderr, "Could not bind attribute %s\n", attribute_name);
+            return 0;
+        }
+        attribute_name = "v_colour";
+        attribute_v_colour = glGetAttribLocation(program, attribute_name);
+        if (attribute_v_colour == -1) {
+            fprintf(stderr, "Could not bind attribute %s\n", attribute_name);
+            return 0;
+        }
     }
-    attribute_name = "v_colour";
-    attribute_v_colour = glGetAttribLocation(program, attribute_name);
-    if (attribute_v_colour == -1) {
-        fprintf(stderr, "Could not bind attribute %s\n", attribute_name);
-        return 0;
-    }
-    const char* uniform_name;
-    uniform_name = "m";
-    uniform_m = glGetUniformLocation(program, uniform_name);
-    if (uniform_m == -1) {
-        fprintf(stderr, "Could not bind uniform %s\n", uniform_name);
-        return 0;
-    }
-    uniform_name = "v";
-    uniform_v = glGetUniformLocation(program, uniform_name);
-    if (uniform_v == -1) {
-        fprintf(stderr, "Could not bind uniform %s\n", uniform_name);
-        return 0;
-    }
-    uniform_name = "p";
-    uniform_p = glGetUniformLocation(program, uniform_name);
-    if (uniform_p == -1) {
-        fprintf(stderr, "Could not bind uniform %s\n", uniform_name);
-        return 0;
-    }
-    uniform_name = "m_3x3_inv_transp";
-    uniform_m_3x3_inv_transp = glGetUniformLocation(program, uniform_name);
-    if (uniform_m_3x3_inv_transp == -1) {
-        fprintf(stderr, "Could not bind uniform %s\n", uniform_name);
-        return 0;
-    }
-    uniform_name = "v_inv";
-    uniform_v_inv = glGetUniformLocation(program, uniform_name);
-    if (uniform_v_inv == -1) {
-        fprintf(stderr, "Could not bind uniform %s\n", uniform_name);
-        return 0;
+    if (use_png_texture)
+    {
+        attribute_name = "texcoord";
+	    attribute_texcoord = glGetAttribLocation(program, attribute_name);
+	    if (attribute_texcoord == -1) {
+		    std::cerr << "Could not bind attribute " << attribute_name << std::endl;
+		    return false;
+	    }
     }
 
+    const char* uniform_name;
+
+        uniform_name = "m";
+        uniform_m = glGetUniformLocation(program, uniform_name);
+        if (uniform_m == -1) {
+            fprintf(stderr, "Could not bind uniform %s\n", uniform_name);
+            return 0;
+        }
+        uniform_name = "v";
+        uniform_v = glGetUniformLocation(program, uniform_name);
+        if (uniform_v == -1) {
+            fprintf(stderr, "Could not bind uniform %s\n", uniform_name);
+            return 0;
+        }
+        uniform_name = "p";
+        uniform_p = glGetUniformLocation(program, uniform_name);
+        if (uniform_p == -1) {
+            fprintf(stderr, "Could not bind uniform %s\n", uniform_name);
+            return 0;
+        }
+    if (!use_png_texture)
+    {
+        uniform_name = "m_3x3_inv_transp";
+        uniform_m_3x3_inv_transp = glGetUniformLocation(program, uniform_name);
+        if (uniform_m_3x3_inv_transp == -1) {
+            fprintf(stderr, "Could not bind uniform %s\n", uniform_name);
+            return 0;
+        }
+    
+        uniform_name = "v_inv";
+        uniform_v_inv = glGetUniformLocation(program, uniform_name);
+        if (uniform_v_inv == -1) {
+            fprintf(stderr, "Could not bind uniform %s\n", uniform_name);
+            return 0;
+        }
+    }
+    if (use_png_texture)
+    {
+        uniform_name = "mytexture";
+	    uniform_mytexture = glGetUniformLocation(program, uniform_name);
+	    if (uniform_mytexture == -1) {
+		    std::cerr << "Could not bind uniform " << uniform_name << std::endl;
+		    return false;
+	    }
+    }
     fps_start = glutGet(GLUT_ELAPSED_TIME);
 
     return 1;
@@ -251,8 +288,8 @@ void BaseUI::onReshape(int width, int height) {
 void BaseUI::init_view() {
   //main_object.object2world = glm::mat4(1);
     transforms[MODE_CAMERA] = glm::lookAt(
-        glm::vec3(0.0, -1.0,    0.0),   // eye
-        glm::vec3(0.0, -0.2929, 0.7071),   // direction
+        glm::vec3(0.0, -1.0,    0.4),   // eye
+        glm::vec3(0.0, -0.2929, 0.5071),   // direction
         glm::vec3(0.0, -0.7071, 0.7071));  // up
 }
 
@@ -277,9 +314,18 @@ int BaseUI::gui_main(int argc, char* argv[]) {
         fprintf(stderr, "Error: your graphic card does not support OpenGL 2.0\n");
         return 1;
     }
-
-    char* v_shader_filename = (char*) "/home/jack/catkin_ws/phong-shading.v.glsl";
-    char* f_shader_filename = (char*) "/home/jack/catkin_ws/phong-shading.f.glsl";
+    char v_shader_filename[128];
+    char f_shader_filename[128];
+    if (!use_png_texture)
+    {
+        std::strcpy(v_shader_filename, "/home/jack/catkin_ws/phong-shading.v.glsl");
+        std::strcpy(f_shader_filename, "/home/jack/catkin_ws/phong-shading.f.glsl");
+    }
+    else
+    {
+        std::strcpy(v_shader_filename, "/home/jack/catkin_ws/cube.v.glsl");
+        std::strcpy(f_shader_filename, "/home/jack/catkin_ws/cube.f.glsl");
+    }
 
     if (init_resources(v_shader_filename, f_shader_filename)) {
         init_view();
@@ -293,6 +339,7 @@ int BaseUI::gui_main(int argc, char* argv[]) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glEnable(GL_DEPTH_TEST);
+        glEnable(GL_TEXTURE_2D);
         //glDepthFunc(GL_LEQUAL);
         //glDepthRange(1, 0);
         last_ticks = glutGet(GLUT_ELAPSED_TIME);

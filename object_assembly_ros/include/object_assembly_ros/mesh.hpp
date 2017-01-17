@@ -1,3 +1,6 @@
+#ifndef MESH_HPP
+#define MESH_HPP
+
 #include <vector>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,75 +10,136 @@
 #include <sstream>
 #include <GL/glew.h>
 #include <GL/glut.h>
+/* Using SDL2 for the base window and OpenGL context init */
+#include "SDL.h"
+/* Using SDL2_image to load PNG & JPG in memory */
+#include "SDL_image.h"
 
 
 //TODO: remove globals
     GLint attribute_v_coord = -1;
     GLint attribute_v_normal = -1;
     GLint attribute_v_colour = -1;
-    GLint uniform_m = -1, uniform_v = -1, uniform_p = -1;
+    GLint uniform_m = -1, uniform_v = -1, uniform_p = -1, uniform_mvp = -1;
     GLint uniform_m_3x3_inv_transp = -1, uniform_v_inv = -1;
+
+    GLint attribute_texcoord = -1;
+    GLint uniform_mytexture = -1;
+    bool use_png_texture = false;
 
 class Mesh {
 private:
-  GLuint vbo_vertices, vbo_normals, ibo_elements, vbo_colours;
-public:
-  std::vector<glm::vec4> vertices;
-  std::vector<glm::vec3> normals;
-  std::vector<GLushort> elements;
-  glm::mat4 object2world;
-  std::vector<glm::vec3> colours;
+    GLuint vbo_vertices, vbo_normals, ibo_elements, vbo_colours, vbo_cube_texcoords;
 
-  Mesh() : vbo_vertices(0), vbo_normals(0), ibo_elements(0), vbo_colours(0), object2world(glm::mat4(1)) {}
-  ~Mesh() {
-    if (vbo_vertices != 0)
-      glDeleteBuffers(1, &vbo_vertices);
-    if (vbo_normals != 0)
-      glDeleteBuffers(1, &vbo_normals);
-    if (ibo_elements != 0)
-      glDeleteBuffers(1, &ibo_elements);
-    if (vbo_colours != 0)
-      glDeleteBuffers(1, &vbo_colours);
-  }
+public:
+    GLuint texture_id;
+    std::vector<glm::vec4> vertices;
+    std::vector<glm::vec3> normals;
+    std::vector<GLushort> elements;
+    glm::mat4 object2world;
+    std::vector<glm::vec3> colours;
+    GLfloat cube_texcoords[2*4*6] = {
+	    // front
+	    0.0, 0.0,
+	    1.0, 0.0,
+	    1.0, 1.0,
+	    0.0, 1.0,
+    };
+    char *img_name=NULL;
+
+
+    Mesh() : vbo_vertices(0), vbo_normals(0), ibo_elements(0), vbo_colours(0), object2world(glm::mat4(1)), texture_id(0), vbo_cube_texcoords(0) {}
+    ~Mesh() {
+        if (vbo_vertices != 0)
+          glDeleteBuffers(1, &vbo_vertices);
+        if (vbo_normals != 0)
+          glDeleteBuffers(1, &vbo_normals);
+        if (ibo_elements != 0)
+          glDeleteBuffers(1, &ibo_elements);
+        if (vbo_colours != 0)
+          glDeleteBuffers(1, &vbo_colours);
+        if (use_png_texture)
+        {
+          if (vbo_cube_texcoords != 0)
+          	glDeleteBuffers(1, &vbo_cube_texcoords);
+          if (texture_id != 0)
+            glDeleteTextures(1, &texture_id);
+        }
+        if (img_name != NULL)
+          delete [] img_name;
+    }
 
   /**
    * Store object vertices, normals and/or elements in graphic card
    * buffers
    */
-  void upload() {
-    if (this->vertices.size() > 0) {
-      glGenBuffers(1, &this->vbo_vertices);
-      glBindBuffer(GL_ARRAY_BUFFER, this->vbo_vertices);
-      glBufferData(GL_ARRAY_BUFFER, this->vertices.size() * sizeof(this->vertices[0]),
-		   this->vertices.data(), GL_STATIC_DRAW);
-    }
-    
-    if (this->normals.size() > 0) {
-      glGenBuffers(1, &this->vbo_normals);
-      glBindBuffer(GL_ARRAY_BUFFER, this->vbo_normals);
-      glBufferData(GL_ARRAY_BUFFER, this->normals.size() * sizeof(this->normals[0]),
-		   this->normals.data(), GL_STATIC_DRAW);
-    }
-    
-    if (this->colours.size() > 0) {
-      glGenBuffers(1, &this->vbo_colours);
-      glBindBuffer(GL_ARRAY_BUFFER, this->vbo_colours);
-      glBufferData(GL_ARRAY_BUFFER, this->colours.size() * sizeof(this->colours[0]),
-		   this->colours.data(), GL_STATIC_DRAW);
-    }
+    void upload()
+    {
+        if (this->vertices.size() > 0)
+        {
+          glGenBuffers(1, &this->vbo_vertices);
+          glBindBuffer(GL_ARRAY_BUFFER, this->vbo_vertices);
+          glBufferData(GL_ARRAY_BUFFER, this->vertices.size() * sizeof(this->vertices[0]),
+		       this->vertices.data(), GL_STATIC_DRAW);
+        }
+        
+        if (this->normals.size() > 0)
+        {
+          glGenBuffers(1, &this->vbo_normals);
+          glBindBuffer(GL_ARRAY_BUFFER, this->vbo_normals);
+          glBufferData(GL_ARRAY_BUFFER, this->normals.size() * sizeof(this->normals[0]),
+		       this->normals.data(), GL_STATIC_DRAW);
+        }
+        
+        if (this->colours.size() > 0)
+        {
+          glGenBuffers(1, &this->vbo_colours);
+          glBindBuffer(GL_ARRAY_BUFFER, this->vbo_colours);
+          glBufferData(GL_ARRAY_BUFFER, this->colours.size() * sizeof(this->colours[0]),
+		       this->colours.data(), GL_STATIC_DRAW);
+        }
 
-    if (this->elements.size() > 0) {
-      glGenBuffers(1, &this->ibo_elements);
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->ibo_elements);
-      glBufferData(GL_ELEMENT_ARRAY_BUFFER, this->elements.size() * sizeof(this->elements[0]),
-		   this->elements.data(), GL_STATIC_DRAW);
+        if (this->elements.size() > 0)
+        {
+          glGenBuffers(1, &this->ibo_elements);
+          glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->ibo_elements);
+          glBufferData(GL_ELEMENT_ARRAY_BUFFER, this->elements.size() * sizeof(this->elements[0]),
+		       this->elements.data(), GL_STATIC_DRAW);
+        }
+
+        if (use_png_texture)
+        {
+            for (int i = 1; i < 6; i++)
+                memcpy(&cube_texcoords[i*4*2], &cube_texcoords[0], 2*4*sizeof(GLfloat));
+            glGenBuffers(1, &vbo_cube_texcoords);
+            glBindBuffer(GL_ARRAY_BUFFER, vbo_cube_texcoords);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(cube_texcoords), cube_texcoords, GL_STATIC_DRAW);
+	        SDL_Surface* res_texture = IMG_Load(img_name);
+	        if (res_texture == NULL) {
+		        std::cerr << "IMG_Load: " << SDL_GetError() << std::endl;
+		        exit(-1);
+	        }
+	        glGenTextures(1, &texture_id);
+	        glBindTexture(GL_TEXTURE_2D, texture_id);
+	        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	        glTexImage2D(GL_TEXTURE_2D, // target
+		        0,  // level, 0 = base, no minimap,
+		        GL_RGBA, // internalformat
+		        res_texture->w,  // width
+		        res_texture->h,  // height
+		        0,  // border, always 0 in OpenGL ES
+		        GL_RGB,  // format
+		        GL_UNSIGNED_BYTE, // type
+		        res_texture->pixels);
+	        SDL_FreeSurface(res_texture);
+        }
     }
-  }
 
   /**
    * Draw the object
    */
   void draw() {
+
     if (this->vbo_vertices != 0) {
       glEnableVertexAttribArray(attribute_v_coord);
       glBindBuffer(GL_ARRAY_BUFFER, this->vbo_vertices);
@@ -115,6 +179,25 @@ public:
       );
     }
 
+    if (use_png_texture)
+    {
+        glEnableVertexAttribArray(attribute_texcoord);
+	    glBindBuffer(GL_ARRAY_BUFFER, vbo_cube_texcoords);
+	    glVertexAttribPointer(
+		    attribute_texcoord, // attribute
+		    2,                  // number of elements per vertex, here (x,y)
+		    GL_FLOAT,           // the type of each element
+		    GL_FALSE,           // take our values as-is
+		    0,                  // no extra data between each position
+		    0                   // offset of first element
+	    );
+    }
+    if (use_png_texture)
+    {
+        glActiveTexture(GL_TEXTURE0);
+	    glUniform1i(uniform_mytexture, /*GL_TEXTURE*/0);
+	    glBindTexture(GL_TEXTURE_2D, texture_id);
+    }
     /* Apply object's transformation matrix */
     glUniformMatrix4fv(uniform_m, 1, GL_FALSE, glm::value_ptr(this->object2world));
     /* Transform normal vectors with transpose of inverse of upper left
@@ -137,6 +220,8 @@ public:
       glDisableVertexAttribArray(attribute_v_coord);
     if (this->vbo_colours != 0)
       glDisableVertexAttribArray(attribute_v_colour);
+    if (use_png_texture)
+        glDisableVertexAttribArray(attribute_texcoord);
   }
 
   /**
@@ -237,4 +322,38 @@ public:
 		    this->colours.data(), GL_STATIC_DRAW);
         }
     }
+
+    void load_new_texture()
+    {
+std::cout << "loading"<< img_name <<"\n";
+        glDeleteTextures(1, &texture_id);
+
+        if (vbo_cube_texcoords != 0)
+          	glDeleteBuffers(1, &vbo_cube_texcoords);
+        glGenBuffers(1, &vbo_cube_texcoords);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_cube_texcoords);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(cube_texcoords), cube_texcoords, GL_STATIC_DRAW);
+
+        SDL_Surface* res_texture = IMG_Load(img_name);
+        if (res_texture == NULL) {
+	        std::cerr << "IMG_Load: " << SDL_GetError() << std::endl;
+	        exit(-1);
+        }
+
+        glGenTextures(1, &texture_id);
+        glBindTexture(GL_TEXTURE_2D, texture_id);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, // target
+	        0,  // level, 0 = base, no minimap,
+	        GL_RGBA, // internalformat
+	        res_texture->w,  // width
+	        res_texture->h,  // height
+	        0,  // border, always 0 in OpenGL ES
+	        GL_RGB,  // format
+	        GL_UNSIGNED_BYTE, // type
+	        res_texture->pixels);
+        SDL_FreeSurface(res_texture);
+    }
 };
+
+#endif //MESH_HPP
