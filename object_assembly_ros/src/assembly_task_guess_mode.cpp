@@ -5,33 +5,36 @@ AssemblyTask::AssemblyTask(
     std::vector<std::vector<int>> connection_pairs,
     int num_connections,
     std::vector<AssemblySubtask> subtasks,
-    int max_particles
+    int max_particles,
+    int connection_list_offset,
+    std::string connection_vector_topic
     )
-    : num_parts_(num_parts),
+    : node_handle_("~"),
+      num_parts_(num_parts),
       connection_pairs_(connection_pairs),
       num_connections_(num_connections),
       subtasks_(subtasks),
-      max_particles_(max_particles)
+      max_particles_(max_particles),
+      connection_list_offset_(connection_list_offset)
 {
     tf::Quaternion unit_quaternion(0.0, 0.0, 0.0, 1.0);
     for (int i = 0; i < num_parts_; i++)
     {
         rotations_.push_back(unit_quaternion);
-        connection_status_vector_.push_back(false);
         part_subgraph_index_.push_back(-1);
     }
+    for (int i = 0; i < num_connections_; i++)
+    {
+        connection_status_vector_.push_back(false);
+    }
     scores_ = std::vector<double>(num_connections,0);
+    connection_vector_publisher_ = node_handle_.advertise<object_assembly_msgs::ConnectionVector>(connection_vector_topic, 0);
 }
 
-double AssemblyTask::evaluate_task(std::vector<geometry_msgs::Pose> current_object_poses, std::vector<object_assembly_msgs::ConnectionInfo> &connection_list)
+double AssemblyTask::evaluate_task(std::vector<tf::Transform> current_object_poses, std::vector<object_assembly_msgs::ConnectionInfo> &connection_list)
 {
-/*
-    if (connections_complete_==num_connections_)
-    {
-        //Assembly finished! Return true
-        return true;
-    }
-*/
+    //for (int i = 0; i < num_parts_; i++)
+    //    std::cout <<"Rotation " << i << ": " << rotations_[i].x() << " "<< rotations_[i].y() << " "<< rotations_[i].z() << " "<< rotations_[i].w() << "\n";
 
     for (int i = 0; i < subtasks_.size(); i++)
     {
@@ -46,20 +49,20 @@ double AssemblyTask::evaluate_task(std::vector<geometry_msgs::Pose> current_obje
                 //std::cout << "(-1,-1): Just evaled subtask\n";
                 if (connection_status_vector_[i])
                 {
-                    AssemblySubgraph new_subgraph;
-                    new_subgraph.nodes.push_back(connection_pairs_[i][0]);
-                    new_subgraph.nodes.push_back(connection_pairs_[i][1]); //TODO: check zero based
+                    //AssemblySubgraph new_subgraph;
+                    //new_subgraph.nodes.push_back(connection_pairs_[i][0]);
+                    //new_subgraph.nodes.push_back(connection_pairs_[i][1]);
                     //new_subgraph.rotations.push_back(subtasks_[i].first_rotation);
                     //new_subgraph.rotations.push_back(subtasks_[i].first_rotation * subtasks_[i].second_rotation);
                     rotations_[connection_pairs_[i][0]] = subtasks_[i].first_rotation;
-                    rotations_[connection_pairs_[i][1]] = subtasks_[i].first_rotation * subtasks_[i].second_rotation; //TODO: maybe multiply inside subtask class?
+                    rotations_[connection_pairs_[i][1]] = subtasks_[i].first_rotation * subtasks_[i].second_rotation;
                     rotations_[connection_pairs_[i][1]].normalize();
                     //std::cout << "1st angle: " << subtasks_[i].first_rotation.getAngle() << "\n";
                     //std::cout << "2nd angle: " << subtasks_[i].second_rotation.getAngle() << "\n";
                     //std::cout << connection_pairs_[i][0] << " angle: " << rotations_[connection_pairs_[i][0]].getAngle() << "\n";
                     //std::cout << connection_pairs_[i][1] << " angle: " << rotations_[connection_pairs_[i][1]].getAngle() << "\n";
-                    //std::cout << "1st: " << subtasks_[i].first_rotation.getAxis().getX() << " " << subtasks_[i].first_rotation.getAxis().getY() << " " << subtasks_[i].first_rotation.getAxis().getZ() << "\n";
-                    //std::cout << "2nd: " << subtasks_[i].second_rotation.getAxis().getX() << " " << subtasks_[i].second_rotation.getAxis().getY() << " " << subtasks_[i].second_rotation.getAxis().getZ() << "\n";
+                    //std::cout << "1st: " << subtasks_[i].first_rotation.x() << " " << subtasks_[i].first_rotation.y() << " " << subtasks_[i].first_rotation.z() << " " << subtasks_[i].first_rotation.w() << "\n";
+                    //std::cout << "2nd: " << subtasks_[i].second_rotation.x() << " " << subtasks_[i].second_rotation.y() << " " << subtasks_[i].second_rotation.z() << " " << subtasks_[i].second_rotation.w() << "\n";
                     //std::cin >> scores_[i];
                     //subgraph_list_.push_back(new_subgraph);
                     part_subgraph_index_[connection_pairs_[i][0]] = ++subgraph_max_index_;
@@ -127,7 +130,16 @@ double AssemblyTask::evaluate_task(std::vector<geometry_msgs::Pose> current_obje
                     }
                 }
             }
-
+        }
+        if (connection_status_vector_[i])
+        {
+            connection_list[connection_list_offset_ + i].relative_pose = subtasks_[i].connection_pose;
+            connection_list[connection_list_offset_ + i].num_particles = max_particles_;
+        }
+        else if (scores_[i] >= 1.0/max_particles_)
+        {
+            connection_list[connection_list_offset_ + i].relative_pose = subtasks_[i].connection_pose;
+            connection_list[connection_list_offset_ + i].num_particles = int(scores_[i] * max_particles_);
         }
     }
     int count_ones = 0;
@@ -138,23 +150,15 @@ double AssemblyTask::evaluate_task(std::vector<geometry_msgs::Pose> current_obje
         if (connection_status_vector_[i]) count_ones++;
     }
     std::cout << "\b\b  \b\b]\n";
+    publish_connection_vector();
 
     return double(count_ones)/double(num_connections_);
-/*
-    while (subtasks_[current_subtask_].evaluate_subtask(current_object_poses, score))
-    {
-        connection_list[current_subtask_].relative_pose = subtasks_[current_subtask_].connection_pose;
-        connection_list[current_subtask_].num_particles = 25;// max_particles_;
-        current_subtask_++;
-        if (current_subtask_==num_subtasks_)
-        {
-            //Assembly finished! Return number of subtasks
-            return current_subtask_;
-        }
-    }
-    connection_list[current_subtask_].relative_pose = subtasks_[current_subtask_].connection_pose;
-    connection_list[current_subtask_].num_particles = int(score * max_particles_);
-    //std::cout << "num_particles: " << connection_list[current_subtask_].num_particles << " from score: " << score << "\n";
-    return current_subtask_;
-*/
+}
+
+void AssemblyTask::publish_connection_vector()
+{
+    object_assembly_msgs::ConnectionVector connection_vector_msg;
+    for (int i = 0; i < connection_status_vector_.size(); i++)
+        connection_vector_msg.v.push_back((char)connection_status_vector_[i]);
+    connection_vector_publisher_.publish(connection_vector_msg);
 }

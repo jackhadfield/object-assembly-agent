@@ -1,5 +1,3 @@
-//#include <Eigen/Dense>
-
 #include <fstream>
 #include <ctime>
 #include <memory>
@@ -10,22 +8,10 @@
 
 #include <assembly_task_guess_mode.hpp>
 
-//#include <fl/util/profiling.hpp>
-
-//#include <opi/interactive_marker_initializer.hpp>
-//#include <osr/free_floating_rigid_bodies_state.hpp>
-//#include <dbot/util/camera_data.hpp>
-//#include <dbot/tracker/rms_gaussian_filter_object_tracker.hpp>
-//#include <dbot/tracker/builder/rms_gaussian_filter_tracker_builder.hpp>
-
 #include <dbot_ros_msgs/ObjectsState.h>
 #include <object_assembly_msgs/FetchSurfaceParams.h>
 #include <object_assembly_msgs/ConnectionInfoList.h>
-//#include <dbot_ros/utils/ros_interface.hpp>
-//#include <dbot_ros/utils/ros_camera_data_provider.hpp>
 
-//#include "opencv2/core/eigen.hpp"
-//#include "opencv2/opencv.hpp"
 #include <guess_mode_ui.hpp>
 
 
@@ -48,7 +34,7 @@ public:
         for (int i = 0; i < ui->meshes_.size(); i++)
         {
             for (int j = 0; j < ui->meshes_[i].vertices.size(); j++)
-                ui->meshes_[i].set_uniform_colour(glm::vec3(0.3,0.3,0.0));
+                ui->meshes_[i].set_uniform_colour(glm::vec3(0.3,0.15,0.0));
         }
         //This should be ok; a mutex is locked when entering new poses
         std::thread (BaseUI::gui_main_static, argc_, argv_).detach();
@@ -85,39 +71,7 @@ public:
 	        poses.push_back (state.objects_state[i].pose.pose);
         }
 	    current_object_poses_ = poses;
-        double total_prob = 0;
-        std::vector<double> density;
-        for (int i = 0; i < num_tasks_; i++)
-        {
-            std::cout << "Task " << i+1 << " ";
-            density.push_back(tasks_[i].evaluate_task(current_object_poses_, connection_list_));
-            //total_prob += probabilities[i];
-        }
-        for (int i = 0; i < num_tasks_; i++)
-        {
-           // if (total_prob - 0.0001 < 0)
-           //     std::cout << "Task " << i+1 << " probability: " << 1.0/double(num_tasks_) << "\n";
-           // else
-            std::cout << "Task " << i+1 << " probability: " << probability_from_densities(density, i) << "\n";
-        }
-// 1/3*x*y*z + 1/3*(1-x)*(1-y)*(1-z) + 1/2*x*y*(1-z) + 1/2*x*(1-y)*z + x*(1-y)*(1-z)
-        /*
-	    int current_subtask = task_.evaluate_task(current_object_poses_, connection_list_);
-        if (current_subtask == task_.num_subtasks_)
-        {
-            std::cout << "You have completed the assembly task!!" << '\n';
-        }
-        else
-        {
-            std::cout << task_.subtask_description(current_subtask) << " (subtask: " << current_subtask+1 << ")\n";
-            object_assembly_msgs::ConnectionInfoList connections_msg;
-            for (int i = 0; i < current_subtask + 1; i++)
-                connections_msg.connections.push_back(
-                                        connection_list_[i]);
-            connection_list_publisher_.publish(connections_msg);
-        }
-        */
-        std::vector<tf::Transform> new_poses;
+        std::vector<tf::Transform> tf_poses;
         for (int i = 0; i < current_object_poses_.size(); i++)
         {
             tf::Transform single_pose(tf::Quaternion (
@@ -129,9 +83,31 @@ public:
                                         current_object_poses_[i].position.x,
                                         current_object_poses_[i].position.y,
                                         current_object_poses_[i].position.z));
-            new_poses.push_back(single_pose);
+            tf_poses.push_back(single_pose);
         }
-        ui->update_poses(new_poses);
+
+        double total_prob = 0;
+        std::vector<double> density;
+        for (int i = 0; i < num_tasks_; i++)
+        {
+            std::cout << "Task " << i+1 << " ";
+            density.push_back(tasks_[i].evaluate_task(tf_poses, connection_list_));
+            //total_prob += probabilities[i];
+        }
+        for (int i = 0; i < num_tasks_; i++)
+        {
+           // if (total_prob - 0.0001 < 0)
+           //     std::cout << "Task " << i+1 << " probability: " << 1.0/double(num_tasks_) << "\n";
+           // else
+            std::cout << "Task " << i+1 << " probability: " << probability_from_densities(density, i) << "\n";
+        }
+// 1/3*x*y*z + 1/3*(1-x)*(1-y)*(1-z) + 1/2*x*y*(1-z) + 1/2*x*(1-y)*z + x*(1-y)*(1-z)
+
+        object_assembly_msgs::ConnectionInfoList connections_msg;
+        connections_msg.connections = connection_list_;
+        connection_list_publisher_.publish(connections_msg);
+
+        ui->update_poses(tf_poses);
     }
 
 private:
@@ -166,7 +142,7 @@ int main(int argc, char** argv)
     while (!client.call(srv))
     {
         ROS_ERROR("Failed to call background removal service. Trying again...");
-        usleep(500);
+        usleep(500000);
     }
     up_vector.setX(srv.response.surface_parameters.a1);
     up_vector.setY(-1.0);
@@ -178,33 +154,31 @@ int main(int argc, char** argv)
     up_vector.setZ(0.0);
     up_vector.normalize();
 
-    // object data
     std::vector<std::string> object_names;
     std::vector<std::string> object_symmetries;
     std::vector<std::string> task_names;
     std::string object_pose_topic;
     std::vector<std::string> descriptions;
 
-    //task data
     int num_tasks, num_checks;
     std::vector<AssemblyTask> tasks;
 
     /* ------------------------------ */
     /* -     Read out data          - */
     /* ------------------------------ */
-    // get object names
     nh.getParam("objects", object_names);
     nh.getParam("object_symmetries", object_symmetries);
     nh.getParam("object_pose_topic", object_pose_topic);
     nh.getParam("number_of_checks", num_checks);
+    nh.getParam("number_of_tasks", num_tasks);
     std::vector<double> margin;
     nh.getParam("margin", margin);
     int max_particles;
     nh.getParam("max_particles", max_particles);
+    max_particles = (int)(max_particles / num_tasks) * num_tasks;
 
     std::vector<object_assembly_msgs::ConnectionInfo> connection_list;
-    // get task data
-    nh.getParam("number_of_tasks", num_tasks);
+    int connection_list_offset = 0;
 
     for (int i = 1; i <= num_tasks; i++) {
         std::string task_pre = std::string("task") + std::to_string(i) + "/";
@@ -233,7 +207,6 @@ int main(int argc, char** argv)
                                    relative_pose[4],
                                    relative_pose[5],
                                    relative_pose[6]);
-            //TODO...
             // subtask shorthand prefix
             AssemblySubtask subtask(i-1,
                                     num_checks,
@@ -249,11 +222,9 @@ int main(int argc, char** argv)
 	        subtasks.push_back(subtask);
 
             //build connection messages to save time later
-            //TODO move to AssemblyAgentNode, because the relative pose
-            //in the message should change when objects are symmetrical
             object_assembly_msgs::ConnectionInfo connection;
-            connection.part = parts[0] - 1;
-            connection.relative_part = parts[1] - 1;
+            connection.part = parts[0];
+            connection.relative_part = parts[1];
             connection.relative_pose.position.x = relative_pose[0];
             connection.relative_pose.position.y = relative_pose[1];
             connection.relative_pose.position.z = relative_pose[2];
@@ -262,12 +233,13 @@ int main(int argc, char** argv)
             connection.relative_pose.orientation.z = relative_pose[5];
             connection.relative_pose.orientation.w = relative_pose[6];
             connection.num_particles = 0;
+            connection.first_particle = (i-1) * max_particles/num_tasks;
             connection_list.push_back(connection);
         }
 
-        AssemblyTask task(object_names.size(), connection_pairs, num_connections, subtasks, max_particles);
+        AssemblyTask task(object_names.size(), connection_pairs, num_connections, subtasks, max_particles/num_tasks, connection_list_offset, "connection_vector" + std::to_string(i));
         tasks.push_back(task);
-	
+	    connection_list_offset += num_connections;
     }
 
     std::string connection_info_list_topic;
