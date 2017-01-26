@@ -6,6 +6,7 @@
 #include <ros/package.h>
 #include <tf/transform_broadcaster.h>
 #include <object_assembly_msgs/ConnectionInfoList.h>
+#include <object_assembly_msgs/ConnectionVector.h>
 
 
 class AssemblySubtask
@@ -14,8 +15,8 @@ class AssemblySubtask
 public:
     AssemblySubtask(int id,
                     int num_checks,
-                    std::vector<int> first_object,
-    		        std::vector<int> second_object,
+                    int first_object,
+    		        int second_object,
                     std::string frame,
     		        tf::Vector3 relative_position,
                     tf::Quaternion relative_orientation,
@@ -25,7 +26,11 @@ public:
                     tf::Vector3 up_vector);
 
     bool evaluate_subtask(
-        std::vector<geometry_msgs::Pose> current_object_poses,
+        std::vector<tf::Transform> &current_object_poses,
+        double &score);
+
+    bool evaluate_subtask(
+        std::vector<geometry_msgs::Pose> &current_object_poses,
         double &score);
 
     bool evaluate_option(int option_id,
@@ -44,40 +49,79 @@ public:
                                   double margin,
                                   double &score);
 
+    void set_first_object_symmetry(std::string new_type);
+
+    void set_second_object_symmetry(std::string new_type);
+
+    void set_prerotation(tf::Quaternion rotation);
+
+    void set_prerotations(tf::Quaternion rotation1, tf::Quaternion rotation2);
+
 private:
     void sort_vector3(tf::Vector3 &v);
 
-    bool evaluate_no_symmetry(tf::Transform first_object_pose,
-                              tf::Transform second_object_pose,
+    bool evaluate_any(tf::Transform &first_object_pose,
+                      tf::Transform &second_object_pose,
+                      double &score);
+
+    bool evaluate_no_symmetry(tf::Transform &first_object_pose,
+                              tf::Transform &second_object_pose,
                               double &score);
 
-    bool evaluate_cubic_cubic(tf::Transform first_object_pose,
-                              tf::Transform second_object_pose,
+    bool evaluate_cubic_cubic(tf::Transform &first_object_pose,
+                              tf::Transform &second_object_pose,
                               double &score);
+
+    bool evaluate_cubic_none(tf::Transform &first_object_pose,
+                             tf::Transform &second_object_pose,
+                             double &score);
+
+    bool evaluate_none_cubic(tf::Transform &first_object_pose,
+                             tf::Transform &second_object_pose,
+                             double &score);
+
+    tf::Quaternion round_quaternion_90(tf::Quaternion rotation);
+
+    void set_connection_pose();
 
 public:
     geometry_msgs::Pose connection_pose;
+
+    //Difference in orientations with respect to yaml instructions, due to
+    //cubic alternative configurations
+    tf::Quaternion first_rotation = tf::Quaternion(0.0, 0.0, 0.0, 1.0);
+    tf::Quaternion second_rotation = tf::Quaternion(0.0, 0.0, 0.0, 1.0);
 
 private:
     const int subtask_id_; //starting at 0
     bool subtask_complete_ = false;
     const int num_checks_;
     int checks_ = 0;
-    std::vector<int> first_object_;
-    std::vector<int> second_object_;
+    int first_object_;
+    int second_object_;
+    int max_particles_ = 5; //TODO initialize
     
     std::string connection_type_;
 
     std::string frame_;
-    tf::Vector3 relative_position_; //TODO fix initialization
+    tf::Vector3 relative_position_;
+    tf::Vector3 relativeY_;
+    tf::Vector3 relativeXZ_sorted_;
     tf::Quaternion relative_orientation_;
-    
+    tf::Vector3 relative_pos_table_frame_;
+    tf::Quaternion relative_rot_table_frame_;
+
     //margin[0,1,2]: position margin, margin[3,4,5,6]: orientation margin
     std::vector<double> margin_;
 
     std::string first_object_symmetry_;
     std::string second_object_symmetry_;
+
+    //Rotation of 1st or 2nd part to conform to other parts of subgraph 
+    //(set before calling evaluate_subtask if needed)
+    tf::Quaternion prerotation_, prerotation1_, prerotation2_;
     tf::Vector3 up_vector_;
     tf::Vector3 rot_axis_;
     double rot_angle_;
+
 };
