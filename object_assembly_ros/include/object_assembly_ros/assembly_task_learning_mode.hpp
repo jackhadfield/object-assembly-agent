@@ -1,4 +1,4 @@
-#include <assembly_subtask_guess_mode.hpp>
+#include <assembly_subtask.hpp>
 
 class AssemblyTask
 {
@@ -15,13 +15,15 @@ public:
         std::string image_output_dir);
     
     //returns current subtask
-    bool evaluate_task(std::vector<geometry_msgs::Pose> current_object_poses, std::vector<object_assembly_msgs::ConnectionInfo> &connection_list);
+    bool evaluate_task(std::vector<tf::Transform> current_object_poses, std::vector<object_assembly_msgs::ConnectionInfo> &connection_list);
 
     tf::Quaternion calculate_prerotation();
 
     void create_word_images();
 
     void display_english_sentence();
+
+    void publish_connection_vector();
 
     int num_connections_;
     std::vector<std::string> words_shuffled_;
@@ -34,6 +36,8 @@ public:
     };
 
 private:
+    ros::NodeHandle node_handle_;
+    ros::Publisher connection_vector_publisher_;
     //int current_subtask_ = 0;
     const int num_parts_;
     const std::string image_output_dir_;

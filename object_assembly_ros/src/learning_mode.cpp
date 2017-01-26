@@ -1,5 +1,3 @@
-//#include <Eigen/Dense>
-
 #include <fstream>
 #include <ctime>
 #include <memory>
@@ -11,22 +9,10 @@
 
 #include <assembly_task_learning_mode.hpp>
 
-//#include <fl/util/profiling.hpp>
-
-//#include <opi/interactive_marker_initializer.hpp>
-//#include <osr/free_floating_rigid_bodies_state.hpp>
-//#include <dbot/util/camera_data.hpp>
-//#include <dbot/tracker/rms_gaussian_filter_object_tracker.hpp>
-//#include <dbot/tracker/builder/rms_gaussian_filter_tracker_builder.hpp>
-
 #include <dbot_ros_msgs/ObjectsState.h>
 #include <object_assembly_msgs/FetchSurfaceParams.h>
 #include <object_assembly_msgs/ConnectionInfoList.h>
-//#include <dbot_ros/utils/ros_interface.hpp>
-//#include <dbot_ros/utils/ros_camera_data_provider.hpp>
 
-//#include "opencv2/core/eigen.hpp"
-//#include "opencv2/opencv.hpp"
 #include <learning_mode_ui.hpp>
 
 
@@ -35,8 +21,8 @@ class AssemblyAgentNode
 
 public:
 
-    AssemblyAgentNode(std::vector<std::string> object_names, std::vector<AssemblyTask> tasks, std::string connection_info_list_topic, std::vector<object_assembly_msgs::ConnectionInfo> connection_list, int argc, char** argv, bool flip_view, tf::Transform camera2user)
-        : object_names_(object_names), tasks_(tasks), connection_list_(connection_list), node_handle_("~"), num_tasks_(tasks.size()), argc_(argc), argv_(argv), flip_view_(flip_view), camera2user_(camera2user)
+    AssemblyAgentNode(std::vector<std::string> object_names, std::vector<AssemblyTask> tasks, std::string connection_info_list_topic, std::vector<std::vector<object_assembly_msgs::ConnectionInfo>> connection_lists, int argc, char** argv, bool flip_view, tf::Transform camera2user)
+        : object_names_(object_names), tasks_(tasks), node_handle_("~"), num_tasks_(tasks.size()), argc_(argc), argv_(argv), flip_view_(flip_view), camera2user_(camera2user)
     {
         std::cout << "Creating Assembly Agent Node\n";
         std::cout << "Choose a sentence (1-" << num_tasks_ << ")\n";
@@ -54,6 +40,7 @@ public:
             }  
         } while (current_task_ > num_tasks_ || current_task_ <= 0);
         --current_task_; 
+        connection_list_ = connection_lists[current_task_];
 
         connection_list_publisher_ = node_handle_.advertise<object_assembly_msgs::ConnectionInfoList>(connection_info_list_topic, 0);
 
@@ -85,8 +72,7 @@ public:
     void display_success_msg()
     {
         std::cout << "CORRECT!\n";
-        int buffer;
-        std::cin >> buffer;
+        usleep(5000000);
     }
 
     void assembly_agent_callback(const dbot_ros_msgs::ObjectsState& state)
@@ -97,7 +83,7 @@ public:
         }
 
 	    current_object_poses_ = poses;
-        std::vector<tf::Transform> new_poses;
+        std::vector<tf::Transform> tf_poses;
         for (int i = 0; i < current_object_poses_.size(); i++)
         {
             tf::Transform single_pose(tf::Quaternion (
@@ -111,16 +97,16 @@ public:
                                         current_object_poses_[i].position.z));
             if (flip_view_)
             {
-                new_poses.push_back(camera2user_ * single_pose);
+                tf_poses.push_back(camera2user_ * single_pose);
             }
             else
             {
-                new_poses.push_back(single_pose);
+                tf_poses.push_back(single_pose);
             }
         }
-        ui->update_poses(new_poses);
+        ui->update_poses(tf_poses);
 
-        if (tasks_[current_task_].evaluate_task(current_object_poses_, connection_list_))
+        if (tasks_[current_task_].evaluate_task(tf_poses, connection_list_))
         {
             display_success_msg();
             exit(1);
@@ -147,23 +133,10 @@ public:
             }
         }
 */
-        /*
-	    int current_subtask = task_.evaluate_task(current_object_poses_, connection_list_);
-        if (current_subtask == task_.num_subtasks_)
-        {
-            std::cout << "You have completed the assembly task!!" << '\n';
-        }
-        else
-        {
-            std::cout << task_.subtask_description(current_subtask) << " (subtask: " << current_subtask+1 << ")\n";
-            object_assembly_msgs::ConnectionInfoList connections_msg;
-            for (int i = 0; i < current_subtask + 1; i++)
-                connections_msg.connections.push_back(
-                                        connection_list_[i]);
-            connection_list_publisher_.publish(connections_msg);
-        }
-        */
 
+        object_assembly_msgs::ConnectionInfoList connections_msg;
+        connections_msg.connections = connection_list_;
+        connection_list_publisher_.publish(connections_msg);
     }
 
 private:
@@ -274,7 +247,7 @@ int main(int argc, char** argv)
                                         camera2user_values[2]));
     }
 
-    std::vector<object_assembly_msgs::ConnectionInfo> connection_list;
+    std::vector<std::vector<object_assembly_msgs::ConnectionInfo>> connection_lists;
 
     for (int i = 1; i <= num_sentences; i++)
     {
@@ -312,6 +285,7 @@ int main(int argc, char** argv)
 
         std::vector<AssemblySubtask> subtasks;
         std::vector<std::vector<int>> connection_pairs;
+        std::vector<object_assembly_msgs::ConnectionInfo> connection_list;
         for (int j = 1; j < valid_words.size(); j++)
         {
             std::vector<int> temp;
@@ -345,11 +319,13 @@ int main(int argc, char** argv)
             connection.relative_pose.orientation.z = 0.0;
             connection.relative_pose.orientation.w = 1.0;
             connection.num_particles = 0;
+            connection.first_particle = 0;
             connection_list.push_back(connection);
         }
 
         AssemblyTask task(num_boxes, connection_pairs, valid_words.size() - 1, subtasks, max_particles, words_shuffled, english, image_output_dir);
         tasks.push_back(task);
+        connection_lists.push_back(connection_list);
     }
 
 
@@ -358,7 +334,7 @@ int main(int argc, char** argv)
                 connection_info_list_topic);
     std::vector<std::string> object_names(num_boxes, "box");
     AssemblyAgentNode assembly_agent_node(object_names, tasks,
-                connection_info_list_topic, connection_list, argc, argv, flip_view, camera2user);
+                connection_info_list_topic, connection_lists, argc, argv, flip_view, camera2user);
 
     ros::Subscriber subscriber = nh.subscribe(
         object_pose_topic, 1, &AssemblyAgentNode::assembly_agent_callback, &assembly_agent_node);

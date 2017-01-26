@@ -12,7 +12,8 @@ AssemblyTask::AssemblyTask(
     std::string english,
     std::string image_output_dir
     )
-    : num_parts_(num_parts),
+    : node_handle_("~"),
+      num_parts_(num_parts),
       connection_pairs_(connection_pairs),
       num_connections_(num_connections),
       subtasks_(subtasks),
@@ -34,18 +35,11 @@ AssemblyTask::AssemblyTask(
         connection_status_vector_.push_back(false);
     }
     scores_ = std::vector<double>(num_connections,0);
+    connection_vector_publisher_ = node_handle_.advertise<object_assembly_msgs::ConnectionVector>("connection_vector", 0);
 }
 
-bool AssemblyTask::evaluate_task(std::vector<geometry_msgs::Pose> current_object_poses, std::vector<object_assembly_msgs::ConnectionInfo> &connection_list)
+bool AssemblyTask::evaluate_task(std::vector<tf::Transform> current_object_poses, std::vector<object_assembly_msgs::ConnectionInfo> &connection_list)
 {
-/*
-    if (connections_complete_==num_connections_)
-    {
-        //Assembly finished! Return true
-        return true;
-    }
-*/
-
     for (int i = 0; i < subtasks_.size(); i++)
     {
         if (!connection_status_vector_[i])
@@ -139,36 +133,26 @@ bool AssemblyTask::evaluate_task(std::vector<geometry_msgs::Pose> current_object
                     }
                 }
             }
-
+        }
+        if (connection_status_vector_[i])
+        {
+            connection_list[i].relative_pose = subtasks_[i].connection_pose;
+            connection_list[i].num_particles = max_particles_;
+        }
+        if (scores_[i] >= 1.0/max_particles_)
+        {
+            connection_list[i].relative_pose = subtasks_[i].connection_pose;
+            connection_list[i].num_particles = int(scores_[i] * max_particles_);
         }
     }
     int count_ones = 0;
-    //std::cout << "Status Vector: [";
     for (int i = 0; i < num_connections_; i++)
     {
-        //std::cout << connection_status_vector_[i] << ", ";
         if (connection_status_vector_[i]) count_ones++;
     }
-    //std::cout << "\b\b  \b\b]\n";
+    publish_connection_vector();
 
     return (count_ones == num_connections_);
-/*
-    while (subtasks_[current_subtask_].evaluate_subtask(current_object_poses, score))
-    {
-        connection_list[current_subtask_].relative_pose = subtasks_[current_subtask_].connection_pose;
-        connection_list[current_subtask_].num_particles = 25;// max_particles_;
-        current_subtask_++;
-        if (current_subtask_==num_subtasks_)
-        {
-            //Assembly finished! Return number of subtasks
-            return current_subtask_;
-        }
-    }
-    connection_list[current_subtask_].relative_pose = subtasks_[current_subtask_].connection_pose;
-    connection_list[current_subtask_].num_particles = int(score * max_particles_);
-    //std::cout << "num_particles: " << connection_list[current_subtask_].num_particles << " from score: " << score << "\n";
-    return current_subtask_;
-*/
 }
 
 void AssemblyTask::create_word_images()
@@ -212,4 +196,12 @@ void AssemblyTask::create_word_images()
 void AssemblyTask::display_english_sentence()
 {
     std::cout << english_ << "\n";
+}
+
+void AssemblyTask::publish_connection_vector()
+{
+    object_assembly_msgs::ConnectionVector connection_vector_msg;
+    for (int i = 0; i < connection_status_vector_.size(); i++)
+        connection_vector_msg.v.push_back((char)connection_status_vector_[i]);
+    connection_vector_publisher_.publish(connection_vector_msg);
 }
