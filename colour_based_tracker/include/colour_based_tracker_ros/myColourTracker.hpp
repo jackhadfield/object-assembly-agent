@@ -14,6 +14,8 @@
 #include <object_assembly_msgs/Point2D.h>
 #include <object_assembly_msgs/Points2D.h>
 #include <object_assembly_msgs/Input.h>
+#include <object_assembly_msgs/HSVRanges.h>
+#include <selector.h>
 
 
 using namespace cv;
@@ -28,7 +30,7 @@ std::vector<Point> CLICKED_POINTS;
 class ThingToFind
 {
 public:
-	ThingToFind(std::vector<int> val,std::string name);
+	ThingToFind(std::vector<int> val, std::string name);
 	~ThingToFind();
 	int values[6];
 	std::string name;
@@ -38,10 +40,6 @@ std::string intToString(int number);
 
 void drawObject(int x, int y, Mat &frame, std::string objectName);
 
-void drawArrow(int x,int y, Mat &frame);
-
-void checkTask(std::vector<double> x, std::vector<double> y, int &current_subtask, Mat &frame);
-
 void mouse_callback(int  event, int  x, int  y, int  flag, void *param);
 
 class ColourTrackerNode {
@@ -49,9 +47,10 @@ class ColourTrackerNode {
 public:
     ColourTrackerNode(std::vector<std::string> object_names,
                       std::vector<std::vector<int>> hsv_ranges,
-                      int flags[5],
+                      bool flags[6],
                       int tracker_params[5],
                       std::vector<int> crop_range,
+                      std::vector<double> resize_coeffs,
                       int particle_filter_downsampling);
 
     void colour_tracker_callback(const sensor_msgs::ImageConstPtr& ros_image);
@@ -85,7 +84,8 @@ private:
     const std::string windowName3 = "After Morphological Operations";
     const std::string trackbarWindowName = "Trackbars";
 
-    int num_objects_;
+    const int num_objects_;
+    const double std_coeff_ = 2.0;
     std::vector<int> x_, y_;
     std::vector<std::vector<int>> past_x_, past_y_;
 	int minmax_[6];
@@ -101,10 +101,10 @@ private:
     bool show_RGB_;
     bool show_HSV_;
     bool show_threshold_;
-	bool trackObjects_ = true;
 	bool useMorphOps_ = true;
     bool useTrackbars_ = false;
     bool smooth_estimate_;
+    bool hsv_ranges_available_;
     int erode_size_;
     int dilate_size_;
 	//matrix storage for HSV image
@@ -113,10 +113,17 @@ private:
 	Mat threshold_;
 
     std::vector<int> crop_range_;
+    std::vector<double> resize_coeffs_;
     int particle_filter_downsampling_;
+
+    //const char windowNameC[] = "Original Image";
+    Selector* selector_;
+    std::vector<Mat> means_;
+    std::vector<Mat> stds_;
 
     ros::NodeHandle node_handle_;
     ros::Publisher position_estimates_publisher_;
     ros::Publisher input_publisher_;
+    ros::Publisher hsv_ranges_publisher_;
 };
 

@@ -76,63 +76,6 @@ void drawObject(int x, int y, Mat &frame, std::string objectName) {
 
 }
 
-
-void drawArrow(int x,int y, Mat &frame) {
-    y = y-15;
-    Scalar colour = Scalar(0, 0, 255);
-    if (y-75>0 && x>0 && y<FRAME_HEIGHT && x<FRAME_WIDTH) {
-        line(frame, Point(x, y), Point(x, y - 75), colour, 2);
-        line(frame, Point(x, y), Point(x>25 ? x-25 : 1, y - 25), colour, 2);
-        line(frame, Point(x, y), Point(FRAME_WIDTH-26>x ? x+25 : FRAME_WIDTH, y - 25), colour, 2);
-    }
-}
-
-void checkTask(std::vector<double> x, std::vector<double> y, int &current_subtask, Mat &frame) {
-
-    if (current_subtask==0) {
-        if (x[0]!=0&&x[1]!=0&&y[0]!=0&&y[1]!=0) {
-            if (abs(x[1]-x[0]) < 30 && y[0]-y[1]>20 && y[0]-y[1]<75) {
-                current_subtask++;
-                std::cout << "Subtask: " << current_subtask << " DONE!\n";
-            }
-            else {
-                putText(frame, "Subtask 1: Place the orange box", Point(0, 50), 2, 1, Scalar(0, 255, 0), 2);
-                putText(frame, "on the green box", Point(0, 80), 2, 1, Scalar(0, 255, 0), 2);
-                drawArrow((int)x[0],(int)y[0],frame);
-            }
-        }
-    }
-    else if (current_subtask==1) {
-        if (x[1]!=0&&x[2]!=0&&y[1]!=0&&y[2]!=0) {
-            if (abs(x[2]-x[1]) < 30 && y[1]-y[2]>20 && y[1]-y[2]<75) {
-                current_subtask++;
-                std::cout << "Subtask: " << current_subtask << " DONE!\n";
-            }
-            else {
-                putText(frame, "Subtask 2: Place the white box", Point(0, 50), 2, 1, Scalar(0, 255, 0), 2);
-                putText(frame, "on the orange box", Point(0, 80), 2, 1, Scalar(0, 255, 0), 2);
-                drawArrow((int)x[1],(int)y[1],frame);
-            }
-        }
-    }
-    else if (current_subtask==2) {
-        if (x[2]!=0&&x[3]!=0&&y[2]!=0&&y[3]!=0) {
-            if (abs(x[3]-x[2]) < 30 && y[2]-y[3]>20 && y[2]-y[3]<75) {
-                current_subtask++;
-                std::cout << "Subtask: " << current_subtask << " DONE!\n";
-            }
-            else {
-                putText(frame, "Subtask 3: Place the yellow box", Point(0, 50), 2, 1, Scalar(0, 255, 0), 2);
-                putText(frame, "on the white box", Point(0, 80), 2, 1, Scalar(0, 255, 0), 2);
-                drawArrow((int)x[2],(int)y[2],frame);
-            }
-        }
-    }
-    else {
-        putText(frame, "TASK COMPLETE!", Point(0, 50), 2, 1, Scalar(0, 255, 0), 2);
-    }
-}
-
 void mouse_callback(int  event, int  x, int  y, int  flag, void *param) {
     if (event == EVENT_LBUTTONDOWN)
     {
@@ -148,19 +91,25 @@ void mouse_callback(int  event, int  x, int  y, int  flag, void *param) {
 ColourTrackerNode::ColourTrackerNode(
             std::vector<std::string> object_names,
             std::vector<std::vector<int>> hsv_ranges,
-            int flags[5],
+            bool flags[6],
             int tracker_params[5],
             std::vector<int> crop_range,
-            int particle_filter_downsampling) : node_handle_("~"),
-                                                crop_range_(crop_range),
-                                                particle_filter_downsampling_(particle_filter_downsampling) {
-    num_objects_ = hsv_ranges.size();
+            std::vector<double> resize_coeffs,
+            int particle_filter_downsampling) : 
+                    node_handle_("~"),
+                    crop_range_(crop_range),
+                    resize_coeffs_(resize_coeffs),
+                    particle_filter_downsampling_
+                        (particle_filter_downsampling),
+                    num_objects_(hsv_ranges.size())
+{
     for (int i = 0; i < hsv_ranges.size(); i++) {
         ThingToFind box(hsv_ranges[i], object_names[i]);
         boxes_.push_back(box);
     }
 
-    std::vector<int> temp; //store some zeros
+    std::vector<int> temp;
+    //store some zeros
     for (int j = 0; j < pastValues_; j++)
         temp.push_back(0);
     for (int i = 0; i < num_objects_; i++) {
@@ -172,11 +121,12 @@ ColourTrackerNode::ColourTrackerNode(
         y_estimate_.push_back(0);
         scores_.push_back(0);
     }
-    show_RGB_ = flags[0] == 1;
-    show_HSV_ = flags[1] == 1;
-    show_threshold_ = flags[2] == 1;
-    useTrackbars_ = flags[3] == 1;
-    smooth_estimate_ = flags[4] == 1;
+    show_RGB_ = flags[0];
+    show_HSV_ = flags[1];
+    show_threshold_ = flags[2];
+    useTrackbars_ = flags[3];
+    smooth_estimate_ = flags[4];
+    hsv_ranges_available_ = !flags[5];
     MAX_NUM_OBJECTS_ = tracker_params[0];
     MIN_OBJECT_AREA_ = tracker_params[1];
     MAX_OBJECT_AREA_ = tracker_params[2];
@@ -189,10 +139,17 @@ ColourTrackerNode::ColourTrackerNode(
 
     position_estimates_publisher_ = node_handle_.advertise<object_assembly_msgs::Points2D>("objects_Points2D", 0);
     input_publisher_ = node_handle_.advertise<object_assembly_msgs::Input>("input", 0);
+    hsv_ranges_publisher_ = node_handle_.advertise<object_assembly_msgs::HSVRanges>("HSV_ranges", 0);
+
+	if (show_RGB_)
+        namedWindow(windowName, WINDOW_AUTOSIZE);
+    if (!hsv_ranges_available_)
+        selector_ = new Selector(windowName.c_str());
 }
 
 
-void ColourTrackerNode::colour_tracker_callback(const sensor_msgs::ImageConstPtr& ros_image) {
+void ColourTrackerNode::colour_tracker_callback(const sensor_msgs::ImageConstPtr& ros_image)
+{
     Mat cameraFeed;
     try {
         (cv_bridge::toCvShare(ros_image,"bgr8")->image).copyTo(cameraFeed);
@@ -230,17 +187,19 @@ void ColourTrackerNode::publish() {
     
     object_assembly_msgs::Input input;
     for (int i = 0; i < num_objects_; i++) {
-//TODO Add resize option (currently for sd colour, hd depth)
-        input.input.push_back(3.75*points.points[i].x/particle_filter_downsampling_);
-        input.input.push_back(2.547*points.points[i].y/particle_filter_downsampling_);
+        input.input.push_back(resize_coeffs_[0]*points.points[i].x/particle_filter_downsampling_);
+        input.input.push_back(resize_coeffs_[1]*points.points[i].y/particle_filter_downsampling_);
         input.input.push_back(0.7); //TODO remove this line
     }
     for (int i = 0; i < num_objects_; i++) {
-//TODO Add resize option (currently for sd colour, hd depth)
         input.input.push_back(scores_[i]);
     }
     input_publisher_.publish(input);
-    
+    object_assembly_msgs::HSVRanges ranges_msg;
+    for (int i = 0; i < num_objects_; i++)
+        for (int j = 0; j < 6; j++)
+            ranges_msg.ranges.push_back(boxes_[i].values[j]);
+    hsv_ranges_publisher_.publish(ranges_msg);
 }
 
 
@@ -289,6 +248,7 @@ void ColourTrackerNode::morphOps(Mat &thresh) {
 
 double ColourTrackerNode::smoothEstimate(std::vector<int> &past_values,
                           int current_value) {
+//TODO smooth based only on previous estimate
     double estimate = 0.0312*current_value; //extra to add up to 1
     past_values.erase(past_values.begin(), past_values.begin()+1);
     past_values.push_back(current_value);
@@ -299,8 +259,14 @@ double ColourTrackerNode::smoothEstimate(std::vector<int> &past_values,
 }
 
 
-bool ColourTrackerNode::trackFilteredObject(int &x, int &y, Mat threshold,
-                             Mat &cameraFeed, std::string objectName, double &score) {
+bool ColourTrackerNode::trackFilteredObject(
+            int &x,
+            int &y,
+            Mat threshold,
+            Mat &cameraFeed,
+            std::string objectName,
+            double &score)
+{
     Mat temp;
     threshold.copyTo(temp);
     //these two vectors needed for output of findContours
@@ -358,40 +324,26 @@ bool ColourTrackerNode::trackFilteredObject(int &x, int &y, Mat threshold,
 void ColourTrackerNode::doStuff(Mat &cameraFeed) {
     //convert frame from BGR to HSV colorspace
     cvtColor(cameraFeed, HSV_, COLOR_BGR2HSV);
-	if (show_RGB_) {
-        namedWindow(windowName, WINDOW_AUTOSIZE);
-        setMouseCallback(windowName, mouse_callback);
-    }
-    //repeat for all objects
-    for (int obj = 0; obj < num_objects_; obj++) {
-        for (int i = 0; i < 6; i++)
-		    minmax_[i] = boxes_[obj].values[i];
-		objectName_ = boxes_[obj].name;
-        //filter HSV image between values and store filtered 
-		//image to threshold matrix
-        if (useTrackbars_)
-            inRange(HSV_, Scalar(H_MIN, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold_);
-        else
-            inRange(HSV_, Scalar(minmax_[0], minmax_[2], minmax_[4]), Scalar(minmax_[1], minmax_[3], minmax_[5]), threshold_);
-            
-        if (useMorphOps_)
-            //TODO: remove this part very soon!!!
-            if (obj == 3)
-            {
-                Mat erodeElement = getStructuringElement(MORPH_RECT, Size(1, 1));
-                Mat dilateElement = getStructuringElement(MORPH_RECT, Size(dilate_size_, dilate_size_));
-
-                erode(threshold_, threshold_, erodeElement);
-                erode(threshold_, threshold_, erodeElement);
-
-                dilate(threshold_, threshold_, dilateElement);
-                dilate(threshold_, threshold_, dilateElement);
-            }
+        //setMouseCallback(windowName, mouse_callback);
+    if (hsv_ranges_available_)
+    {
+        //repeat for all objects
+        for (int obj = 0; obj < num_objects_; obj++) {
+            for (int i = 0; i < 6; i++)
+		        minmax_[i] = boxes_[obj].values[i];
+		    objectName_ = boxes_[obj].name;
+            //filter HSV image between values and store filtered 
+		    //image to threshold matrix
+            if (useTrackbars_)
+                inRange(HSV_, Scalar(H_MIN, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold_);
             else
+                inRange(HSV_, Scalar(minmax_[0], minmax_[2], minmax_[4]), Scalar(minmax_[1], minmax_[3], minmax_[5]), threshold_);
+                
+            if (useMorphOps_)
                 morphOps(threshold_);
-        if (trackObjects_) {
+
             if (trackFilteredObject(x_[obj], y_[obj], threshold_, cameraFeed, objectName_, scores_[obj])) {
-            //let user know you found an object
+            //let user know an object was found
                 if (smooth_estimate_) {
                     x_estimate_[obj] = smoothEstimate(past_x_[obj], x_[obj]);
                     y_estimate_[obj] = smoothEstimate(past_y_[obj], y_[obj]);
@@ -404,12 +356,28 @@ void ColourTrackerNode::doStuff(Mat &cameraFeed) {
                 drawObject((int)x_estimate_[obj], (int)y_estimate_[obj], cameraFeed, objectName_);
             }
         }
+
+        publish();
+
+    }
+    else
+    {
+        if (selector_->calculate_ranges(HSV_, means_, stds_) >= num_objects_)
+        {
+            hsv_ranges_available_ = true;
+            for (int obj = 0; obj < num_objects_; obj++)
+            {
+                boxes_[obj].values[0] = (int)(means_[obj].at<double>(0,0) - std_coeff_ * stds_[obj].at<double>(0,0));
+                boxes_[obj].values[2] = (int)(means_[obj].at<double>(1,0) - std_coeff_ * stds_[obj].at<double>(1,0));
+                boxes_[obj].values[4] = (int)(means_[obj].at<double>(2,0) - std_coeff_ * stds_[obj].at<double>(2,0));
+                boxes_[obj].values[1] = (int)(means_[obj].at<double>(0,0) + std_coeff_ * stds_[obj].at<double>(0,0));
+                boxes_[obj].values[3] = (int)(means_[obj].at<double>(1,0) + std_coeff_ * stds_[obj].at<double>(1,0));
+                boxes_[obj].values[5] = (int)(means_[obj].at<double>(2,0) + std_coeff_ * stds_[obj].at<double>(2,0));
+std::cout << "VAL: " << boxes_[obj].values[0] << " to " << boxes_[obj].values[1] << "\n";
+            }
+        }
     }
 
-    //checkTask(x_estimate_, y_estimate_, current_subtask_, cameraFeed);
-
-    publish();
-        
     if (show_threshold_)
         imshow(windowName2, threshold_);
     if (show_RGB_)
@@ -422,31 +390,37 @@ void ColourTrackerNode::doStuff(Mat &cameraFeed) {
 
 
 int main(int argc, char* argv[]) {
-    ros::init(argc, argv, "colour_tracker");
+    ros::init(argc, argv, "colour_based_tracker");
     ros::NodeHandle nh("~");
 
     //Read params from config file
     int num_objects;
     nh.getParam("number_of_objects", num_objects);
-    std::vector<std::string> object_names;
-    std::vector<std::vector<int>> hsv_ranges;
-    for (int i = 0; i < num_objects; i++) {
-        std::string object_pre = std::string("objects/") + "object" + std::to_string(i+1) + "/";
-        std::string object_name;
-        std::vector<int> hsv_range;
-        nh.getParam(object_pre + "name", object_name);
-        object_names.push_back(object_name);
-        nh.getParam(object_pre + "hsv_range", hsv_range);
-        hsv_ranges.push_back(hsv_range);        
-    }
+
     std::string camera_topic;
     nh.getParam("camera_topic", camera_topic);
-    int flags[5];
+    bool flags[6];
     nh.getParam("show_rgb", flags[0]);
     nh.getParam("show_hsv", flags[1]);
     nh.getParam("show_threshold", flags[2]);
     nh.getParam("use_trackbars", flags[3]);
     nh.getParam("smooth_estimate", flags[4]);
+    nh.getParam("interactive_hsv_ranges", flags[5]);
+
+    std::vector<std::string> object_names;
+    std::vector<std::vector<int>> hsv_ranges;
+    for (int i = 0; i < num_objects; i++) {
+        std::string object_pre = std::string("objects/") + "object" + std::to_string(i+1) + "/";
+        std::string object_name;
+        nh.getParam(object_pre + "name", object_name);
+        object_names.push_back(object_name);
+        if (flags[5])
+        {
+            std::vector<int> hsv_range;
+            nh.getParam(object_pre + "hsv_range", hsv_range);
+            hsv_ranges.push_back(hsv_range); 
+        }       
+    }
 
     int tracker_params[5];
     nh.getParam("MAX_NUM_OBJECTS", tracker_params[0]);
@@ -457,10 +431,17 @@ int main(int argc, char* argv[]) {
 
     std::vector<int> crop_range;
     nh.getParam("crop_range", crop_range);
+    std::vector<double> resize_coeffs;
+    nh.getParam("resize_coefficients", resize_coeffs);
+    if (resize_coeffs.size() != 2)
+    {
+        ROS_ERROR("resize_coefficients must have two values");
+        return -1;
+    }
     int particle_filter_downsampling;
     nh.getParam("particle_filter_downsampling", particle_filter_downsampling);
 
-    ColourTrackerNode colour_tracker_node(object_names, hsv_ranges, flags, tracker_params, crop_range, particle_filter_downsampling);
+    ColourTrackerNode colour_tracker_node(object_names, hsv_ranges, flags, tracker_params, crop_range, resize_coeffs, particle_filter_downsampling);
 
     ros::Subscriber subscriber = nh.subscribe(camera_topic, 1, &ColourTrackerNode::colour_tracker_callback, &colour_tracker_node);
 

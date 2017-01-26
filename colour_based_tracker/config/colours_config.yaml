@@ -10,17 +10,20 @@ MAX_OBJECT_AREA: 204800
 erode_size: 2 #3
 dilate_size: 4 #8
 
-crop_range: [205, 71, 205, 141]
-particle_filter_downsampling: 4
+crop_range: [205, 71, 205, 141] #in pixel values (make sure these match the values in
+                                #image_crop_config.yaml, divided by the resize coefficients)
+resize_coefficients: [3.75, 2.547] #Match to depth image size used by tracker (before downsampling). [3.75, 2.547] for SD -> HD
+particle_filter_downsampling: 4 #Downsampling ratio used by tracker
 
-show_rgb: 1
-show_hsv: 0
-show_threshold: 0
-use_trackbars: 0
-smooth_estimate: 0
+show_rgb: true
+show_hsv: false
+show_threshold: false
+use_trackbars: false
+smooth_estimate: false
+interactive_hsv_ranges: true #calculate hsv ranges by selecting areas on the screen (click and drag)
 camera_topic: /kinect2/sd/image_color_rect
 #camera_topic: /webcam/image_raw
-number_of_objects: 4
+#number_of_objects: 4
 
 objects:
     object1:

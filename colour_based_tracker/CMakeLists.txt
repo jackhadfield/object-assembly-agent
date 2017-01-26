@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(colour_tracker_ros)
+project(colour_based_tracker_ros)
 
 add_definitions(-std=c++0x)
 add_definitions(-DPROFILING_ON=1 -fPIC)
@@ -143,6 +143,7 @@ file(GLOB_RECURSE headers include/${PROJECT_NAME}/*.hpp
 
 set(sources
   ${headers}
+  #src/selector.cpp
   src/myColourTracker.cpp
 )
 
@@ -158,13 +159,13 @@ set(sources
 
 #add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-add_executable(colour_tracker
+add_executable(colour_based_tracker
   src/myColourTracker.cpp)
 #add_dependencies(colour_tracker colour_tracker_ros_generate_messages_cpp)
 
 #set_target_properties(colour_tracker PROPERTIES LINKER_LANGUAGE CXX)
 
-target_link_libraries(colour_tracker
+target_link_libraries(colour_based_tracker
   ${catkin_LIBRARIES}
   ${OpenCV_LIBS}
   ${PCL_LIBRARIES}
