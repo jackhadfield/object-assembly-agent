@@ -4,7 +4,9 @@ class AssemblyTask
 {
 
 public:
-    AssemblyTask(int num_subtasks,
+    AssemblyTask(int num_parts,
+                 std::vector<std::vector<int>> connnection_pairs,
+                 int num_subtasks,
                  std::vector<AssemblySubtask> subtasks,
                  int max_particles,
                  std::vector<std::string> descriptions);
@@ -17,9 +19,14 @@ public:
     int num_subtasks_;
 
 private:
+    const int num_parts_;
     int current_subtask_ = 0;
     std::vector<AssemblySubtask> subtasks_;
     int max_particles_;
     std::vector<std::string> descriptions_;
+    std::vector<std::vector<int>> connection_pairs_;
 
+    int subgraph_max_index_ = -1;
+    std::vector<int> part_subgraph_index_; //which subgraph each part belongs to (-1 means none)
+    std::vector<tf::Quaternion> rotations_;
 };
