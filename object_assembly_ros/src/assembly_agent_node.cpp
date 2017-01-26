@@ -7,7 +7,7 @@
 #include <ros/ros.h>
 #include <ros/package.h>
 
-#include <assembly_task.hpp>
+#include <assembly_task_guidance_mode.hpp>
 
 //#include <fl/util/profiling.hpp>
 
@@ -26,7 +26,7 @@
 //#include "opencv2/core/eigen.hpp"
 //#include "opencv2/opencv.hpp"
 
-
+//TODO publish current subtask
 class AssemblyAgentNode
 {
 
@@ -37,11 +37,7 @@ public:
     {
         std::cout << "Creating Assembly Agent Node\n";
 
-
-
         connection_list_publisher_ = node_handle_.advertise<object_assembly_msgs::ConnectionInfoList>(connection_info_list_topic, 0);
-        //object_state_publisher_ =
-        //    node_handle_.advertise<XXXXXXXX>("XXXXXXXX", 0);
     }
 
     void assembly_agent_callback(const dbot_ros_msgs::ObjectsState& state)
@@ -125,10 +121,12 @@ int main(int argc, char** argv)
     // get task data
     nh.getParam("number_of_subtasks", num_subtasks);
 
+    std::vector<std::vector<int>> connection_pairs;
+
     for (int i=1; i<=num_subtasks; i++) {
         std::string connection_type;
-	    std::vector<int> first_object;
-    	std::vector<int> second_object;
+	    int first_object;
+    	int second_object;
 
 	// subtask shorthand prefix
         std::string subtask_pre = std::string("subtasks/") + "subtask" + std::to_string(i) + "/";
@@ -140,6 +138,12 @@ int main(int argc, char** argv)
 	    nh.getParam(subtask_pre + "object", first_object);
 	    nh.getParam(subtask_pre + "relative_object", second_object);
 	    nh.getParam(subtask_pre + "connection_type", connection_type);
+        --first_object;
+        --second_object;
+        std::vector<int> temp;
+        temp.push_back(first_object);
+        temp.push_back(second_object);
+        connection_pairs.push_back(temp);
 
 	    std::vector<double> relative_pose;
 	    nh.getParam(subtask_pre + "relative_pose", relative_pose);
@@ -174,8 +178,8 @@ int main(int argc, char** argv)
         //TODO move to AssemblyAgentNode, because the relative pose
         //in the message should change when objects are symmetrical
         object_assembly_msgs::ConnectionInfo connection;
-        connection.part = first_object[0] - 1;
-        connection.relative_part = second_object[0] - 1;
+        connection.part = first_object;
+        connection.relative_part = second_object;
         connection.relative_pose.position.x = relative_pose[0];
         connection.relative_pose.position.y = relative_pose[1];
         connection.relative_pose.position.z = relative_pose[2];
@@ -184,13 +188,14 @@ int main(int argc, char** argv)
         connection.relative_pose.orientation.z = relative_pose[5];
         connection.relative_pose.orientation.w = relative_pose[6];
         connection.num_particles = 0;
+        connection.first_particle = 0;
         connection_list.push_back(connection);
     }
 
     int max_particles;
     nh.getParam("max_particles", max_particles);
 
-    AssemblyTask task(num_subtasks, subtasks, max_particles, descriptions);
+    AssemblyTask task(object_names.size(), connection_pairs, num_subtasks, subtasks, max_particles, descriptions);
 
     std::string connection_info_list_topic;
     nh.getParam("connection_info_list_topic",
