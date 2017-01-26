@@ -53,6 +53,8 @@ add_message_files(
   Input.msg
   ConnectionInfo.msg
   ConnectionInfoList.msg
+  ConnectionVector.msg
+  HSVRanges.msg
 )
 
 ## Generate services in the 'srv' folder
