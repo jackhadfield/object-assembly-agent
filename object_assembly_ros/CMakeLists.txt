@@ -1,3 +1,46 @@
+
+FIND_PATH(SDL2IMAGE_INCLUDE_DIR SDL_image.h
+  HINTS
+  $ENV{SDL2IMAGEDIR}
+  $ENV{SDL2DIR}
+  PATH_SUFFIXES include
+  PATHS
+  ~/Library/Frameworks
+  /Library/Frameworks
+  /usr/local/include/SDL2
+  /usr/include/SDL2
+  /sw/include/SDL2 # Fink
+  /opt/local/include/SDL2 # DarwinPorts
+  /opt/csw/include/SDL2 # Blastwave
+  /opt/include/SDL2
+)
+
+FIND_LIBRARY(SDL2IMAGE_LIBRARY 
+  NAMES SDL2_image
+  HINTS
+  $ENV{SDL2IMAGEDIR}
+  $ENV{SDL2DIR}
+  PATH_SUFFIXES lib64 lib
+  PATHS
+  ~/Library/Frameworks
+  /Library/Frameworks
+  /usr/local
+  /usr
+  /sw
+  /opt/local
+  /opt/csw
+  /opt
+)
+
+SET(SDL2IMAGE_FOUND "NO")
+IF(SDL2IMAGE_LIBRARY AND SDL2IMAGE_INCLUDE_DIR)
+  SET(SDL2IMAGE_FOUND "YES")
+ENDIF(SDL2IMAGE_LIBRARY AND SDL2IMAGE_INCLUDE_DIR)
+
+
+
+
+
 cmake_minimum_required(VERSION 2.8.3)
 project(object_assembly_ros)
 
@@ -27,6 +70,18 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(GLUT REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(OpenGL REQUIRED)
+#find_package(SDL2 REQUIRED sdl2)
+find_package(PkgConfig)
+pkg_check_modules(SDL REQUIRED sdl2)
+if(SDL_FOUND)
+	message("======== FOUND SDL ${SDL_VERSION} =============")
+	include_directories(${SDL_INCLUDE_DIRS})
+endif(SDL_FOUND)
+
+#INCLUDE(FindPkgConfig)
+#PKG_SEARCH_MODULE(SDL2_IMAGE REQUIRED SDL2_image>=2.0.0)
+
+
 
 set(PROJECT_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 set(CMAKE_MODULE_PATH ${PROJECT_MODULE_PATH})
@@ -36,10 +91,18 @@ find_package(Boost REQUIRED)
 #find_package(Eigen REQUIRED)
 set(Eigen_INCLUDE_DIRS "/home/jack/eigen3.2.8")
 #find_package(OpenCV REQUIRED)
+set(PNGWriter_INCLUDE_DIRS "/home/jack/Thesis_libs/pngwriter/include")
+set(PNGWriter_LIB "/home/jack/Thesis_libs/pngwriter/lib/libpngwriter.so")
+#set(SDL_IMAGE_INCLUDE_DIRS "/usr/include/SDL2")
+#set(SDL_IMAGE_LIB "/usr/lib/x86_64-linux-gnu/libSDL_image-1.2.so.0")
 
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${Eigen_INCLUDE_DIRS})
 include_directories(${OpenCV_INCLUDE_DIRS})
+include_directories(${PNGWriter_INCLUDE_DIRS})
+#INCLUDE_DIRECTORIES(${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
+include_directories(${SDL_INCLUDE_DIRS})
+include_directories(${SDL2IMAGE_INCLUDE_DIR})
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -176,7 +239,7 @@ set(sources
 #!!! ADD THE NEXT BLOCK WHEN READY !!!
 add_executable(assembly_agent
   src/assembly_subtask.cpp
-  src/assembly_task.cpp
+  src/assembly_task_guidance_mode.cpp
   src/assembly_agent_node.cpp)
 #add_dependencies(assembly_agent object_assembly_ros_generate_messages_cpp)
 
@@ -198,16 +261,16 @@ target_link_libraries(background_removal
   ${PCL_LIBRARIES}
   yaml-cpp)
 
-add_executable(pose_initializer
-  #${headers}
-  src/poseInitializer.cpp)
-
-target_link_libraries(pose_initializer
-  #${PROJECT_NAME}
-  ${catkin_LIBRARIES}
-  #${OpenCV_LIBS}
-  ${PCL_LIBRARIES}
-  yaml-cpp)
+#add_executable(pose_initializer
+#  #${headers}
+#  src/poseInitializer.cpp)
+#
+#target_link_libraries(pose_initializer
+#  #${PROJECT_NAME}
+#  ${catkin_LIBRARIES}
+#  #${OpenCV_LIBS}
+#  ${PCL_LIBRARIES}
+#  yaml-cpp)
 
 add_executable(image_crop
   #${headers}
@@ -248,7 +311,7 @@ target_link_libraries(points_loader
   yaml-cpp)
 
 add_executable(guess_mode
-  src/assembly_subtask_guess_mode.cpp
+  src/assembly_subtask.cpp
   src/assembly_task_guess_mode.cpp
   src/guess_mode.cpp)
 #add_dependencies(assembly_agent object_assembly_ros_generate_messages_cpp)
@@ -257,15 +320,45 @@ add_library(guess_mode_ui
   src/shader_utils.cpp
   src/guess_mode_ui.cpp)
 
-target_link_libraries(guess_mode
-#  ${PROJECT_NAME}
-  ${catkin_LIBRARIES}
-  #${OpenCV_LIBS}
+target_link_libraries(guess_mode_ui
   ${OPENGL_LIBRARIES}
   ${GLUT_LIBRARY}
   ${GLEW_LIBRARY}
+  ${SDL_LIBRARIES}
+  ${SDL2IMAGE_LIBRARY})
+
+target_link_libraries(guess_mode
+#  ${PROJECT_NAME}
+  ${catkin_LIBRARIES}
   guess_mode_ui
-###  ${PCL_LIBRARIES}
+  yaml-cpp)
+
+add_executable(learning_mode
+  src/assembly_subtask.cpp
+  src/assembly_task_learning_mode.cpp
+  src/learning_mode.cpp)
+
+add_library(learning_mode_ui
+  src/shader_utils.cpp
+  src/learning_mode_ui.cpp)
+
+target_link_libraries(learning_mode_ui
+  ${OPENGL_LIBRARIES}
+  ${GLUT_LIBRARY}
+  ${GLEW_LIBRARY}
+  ${SDL_LIBRARIES}
+  ${SDL2IMAGE_LIBRARY})
+
+target_link_libraries(learning_mode
+#  ${PROJECT_NAME}
+  ${catkin_LIBRARIES}
+  #${OPENGL_LIBRARIES}
+  #${GLUT_LIBRARY}
+  #${GLEW_LIBRARY}
+  #${SDL2IMAGE_LIBRARY}
+  #${SDL2_LIBRARY}
+  ${PNGWriter_LIB}
+  learning_mode_ui
   yaml-cpp)
 
 ## Declare a C++ library
