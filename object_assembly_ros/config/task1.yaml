@@ -18,9 +18,8 @@ subtasks:
   #subtask 1 translates to "place object 1 on object 2"
   subtask1:
     description: Place the green box on the orange box
-    object: [1] #subtask refers to object 2. Data is a list because we may want
-                #to connect two composite objects, eg. [1, 2] with [3, 4]
-    relative_object: [2] #compare with single object
+    object: 1
+    relative_object: 2 
     connection_type: place #place objects next to each other. TODO add other options
 
     # frame refers to the way the relative pose is calculated.
@@ -33,21 +32,17 @@ subtasks:
     margin: [0.01, 0.01, 0.01, 1.1, 0.1, 0.1, 0.1] #0.01->slightly over 10 degree difference
   subtask2:
     description: Place the yellow box on the green box
-    object: [4]
-    relative_object: [1] #[1, 2] #compare with composite object 1+2, that has
-                            #orientation pos(2)-pos(1) (normalized) and
-                            #position = mean(pos(2)+pos(1))
+    object: 4
+    relative_object: 1 
     connection_type: place
     frame: global
-    relative_pose: [0, -0.025, 0, 0, 0, 0, 1] #change this
+    relative_pose: [0, -0.025, 0, 0, 0, 0, 1]
     margin: [0.01, 0.01, 0.01, 1.1, 0.1, 0.1, 0.1]
   subtask3:
     description: Place the white box on the yellow box
-    object: [3]
-    relative_object: [4] #[1, 2, 3] #compare with composite object 1+2+3, that has
-                               #orientation = pos(3)-pos(1+2) (normalized) and
-                               #position = mean(pos(3)+pos(2)+pos(1))
+    object: 3
+    relative_object: 4
     connection_type: place
     frame: global
-    relative_pose: [0, -0.025, 0, 0, 0, 0, 1] #change this
+    relative_pose: [0, -0.025, 0, 0, 0, 0, 1]
     margin: [0.01, 0.01, 0.01, 1.1, 0.1, 0.1, 0.1]
