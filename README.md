@@ -3,8 +3,10 @@
 ## Dependecies
  * ROS
  * OpenCV
+ * Eigen
  * [dbot](https://github.com/jackhadfield/dbot)
  * [dbot_ros](https://github.com/jackhadfield/dbot_ros)
+ * pngwriter (for learning mode)
 
 ## Installation
 
