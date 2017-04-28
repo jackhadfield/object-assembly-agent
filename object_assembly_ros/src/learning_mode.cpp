@@ -46,7 +46,7 @@ public:
 
         std::vector<std::string> filenames;
         for(int i = 0; i< object_names_.size(); i++)
-            filenames.push_back("/home/jack/catkin_ws/src/object_assembly_ros/resource/cube2.obj");
+            filenames.push_back("/home/jack/code_test2/catkinws2/src/object_assembly_ros/resource/cube30mm24vert.obj");
         use_png_texture = true;
         ui = new LearningModeUI(filenames);
         for (int i = 0; i < ui->meshes_.size(); i++)
@@ -112,28 +112,6 @@ public:
             exit(1);
         }
 
-/*
-        if (tasks_[current_task_].evaluate_task(current_object_poses_, connection_list_))
-        {
-            display_success_msg();
-            current_task_++;
-            if (current_task_ >= num_tasks_)
-            {
-                while(1);
-            }
-            else
-            {
-                for (int i = 0; i < ui->meshes_.size(); i++)
-                {
-                    std::string temp("/home/jack/catkin_ws/src/object_assembly_ros/output/" + tasks_[current_task_].words_shuffled_[i] + ".png");
-                    ui->meshes_[i].img_name = new char [temp.length()+1];   
-                    std::strcpy(ui->meshes_[i].img_name, temp.c_str());
-                }
-                ui->reload_textures();
-            }
-        }
-*/
-
         object_assembly_msgs::ConnectionInfoList connections_msg;
         connections_msg.connections = connection_list_;
         connection_list_publisher_.publish(connections_msg);
@@ -176,26 +154,28 @@ int main(int argc, char** argv)
     std::srand ( unsigned ( std::time(0) ) );
 
     tf::Vector3 up_vector;
-/*
+
     std::string surface_params_service;
     nh.getParam("surface_params_service", surface_params_service);
     ros::ServiceClient client = nh.serviceClient<object_assembly_msgs::FetchSurfaceParams>(surface_params_service);
     object_assembly_msgs::FetchSurfaceParams srv;
-    srv.request.recalculate = false;
+    srv.request.recalculate = true;
     while (!client.call(srv))
     {
         ROS_ERROR("Failed to call background removal service. Trying again...");
-        usleep(500);
+        usleep(500000);
     }
     up_vector.setX(srv.response.surface_parameters.a1);
     up_vector.setY(-1.0);
     up_vector.setZ(srv.response.surface_parameters.a3);
-*/
+
+/*
     //TODO: REMOVE NEXT 3 LINES WHEN FINISHED EXPERIMENTING
     up_vector.setX(0.0);
     up_vector.setY(-1.0);
     up_vector.setZ(0.0);
     up_vector.normalize();
+*/
 
     std::vector<std::string> object_symmetries;
     std::vector<std::string> task_names;
@@ -204,7 +184,6 @@ int main(int argc, char** argv)
     std::string image_output_dir;
 
     int num_boxes, num_checks, num_sentences;
-    double box_size;
     std::vector<AssemblyTask> tasks;
 
     /* ------------------------------ */
@@ -225,6 +204,9 @@ int main(int argc, char** argv)
     nh.getParam("margin", margin);
     int max_particles;
     nh.getParam("max_particles", max_particles);
+    int all_particles;
+    nh.getParam("all_particles", all_particles);
+    double box_size;
     nh.getParam("box_size", box_size);
     bool shuffle;
     nh.getParam("shuffle", shuffle);
@@ -246,6 +228,10 @@ int main(int argc, char** argv)
                                         camera2user_values[1],
                                         camera2user_values[2]));
     }
+    int N;
+    nh.getParam("N", N);
+    double ymax;
+    nh.getParam("ymax", ymax);
 
     std::vector<std::vector<object_assembly_msgs::ConnectionInfo>> connection_lists;
 
@@ -305,12 +291,16 @@ int main(int argc, char** argv)
                                     margin,
         				            "place",
                                     object_symmetries,
-                                    up_vector);
+                                    //all_particles/(valid_words.size()-1), 
+                                    max_particles,
+                                    up_vector,
+                                    N,
+                                    ymax);
             subtasks.push_back(subtask);
 
             object_assembly_msgs::ConnectionInfo connection;
-            connection.part = temp[0];
-            connection.relative_part = temp[1];
+            connection.part = temp[1];
+            connection.relative_part = temp[0];
             connection.relative_pose.position.x = box_size;
             connection.relative_pose.position.y = 0.0;
             connection.relative_pose.position.z = 0.0;
@@ -319,11 +309,11 @@ int main(int argc, char** argv)
             connection.relative_pose.orientation.z = 0.0;
             connection.relative_pose.orientation.w = 1.0;
             connection.num_particles = 0;
-            connection.first_particle = 0;
+            connection.first_particle = (j-1) * all_particles / (valid_words.size()-1); //0
             connection_list.push_back(connection);
         }
 
-        AssemblyTask task(num_boxes, connection_pairs, valid_words.size() - 1, subtasks, max_particles, words_shuffled, english, image_output_dir);
+        AssemblyTask task(num_boxes, connection_pairs, valid_words.size() - 1, subtasks, max_particles, all_particles, words_shuffled, english, image_output_dir);
         tasks.push_back(task);
         connection_lists.push_back(connection_list);
     }

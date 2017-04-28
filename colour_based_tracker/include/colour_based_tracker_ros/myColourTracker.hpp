@@ -3,8 +3,6 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <opencv/cv.h>
-#include <opencv2/xfeatures2d.hpp>
-#include <opencv2/xfeatures2d/nonfree.hpp>
 #include <vector> 
 #include <cmath>
 #include <cv_bridge/cv_bridge.h>
@@ -16,10 +14,10 @@
 #include <object_assembly_msgs/Input.h>
 #include <object_assembly_msgs/HSVRanges.h>
 #include <selector.h>
+#include <mutex>
 
 
 using namespace cv;
-using namespace xfeatures2d;
 
 //default capture width and height
 const int FRAME_WIDTH = 640;
@@ -39,6 +37,8 @@ public:
 std::string intToString(int number);
 
 void drawObject(int x, int y, Mat &frame, std::string objectName);
+void drawObject(int x, int y, Mat &frame, std::string objectName, Scalar colour);
+void drawObject(int x, int y, Mat &frame, std::string objectName, Scalar colour, int frame_height, int frame_width);
 
 void mouse_callback(int  event, int  x, int  y, int  flag, void *param);
 
@@ -51,9 +51,14 @@ public:
                       int tracker_params[5],
                       std::vector<int> crop_range,
                       std::vector<double> resize_coeffs,
-                      int particle_filter_downsampling);
+                      int particle_filter_downsampling,
+                      double std_coeff,
+                      sensor_msgs::CameraInfo rgb_cinfo,
+                      sensor_msgs::CameraInfo depth_cinfo);
 
     void colour_tracker_callback(const sensor_msgs::ImageConstPtr& ros_image);
+
+    void depth_tracker_callback(const sensor_msgs::ImageConstPtr& ros_image);
 
     void publish();
 
@@ -72,6 +77,7 @@ public:
     void doStuff(Mat &cameraFeed);
 
 private:
+    std::vector<std::string> object_names_;
     //max number of objects to be detected in frame
     int MAX_NUM_OBJECTS_; // = 50;
     //minimum and maximum object area
@@ -112,6 +118,11 @@ private:
 	//matrix storage for binary threshold image
 	Mat threshold_;
 
+    Mat depth_image_;
+    bool depth_available_ = false;
+    std::mutex depth_mutex_;
+    Mat depth_3c_;
+
     std::vector<int> crop_range_;
     std::vector<double> resize_coeffs_;
     int particle_filter_downsampling_;
@@ -120,6 +131,13 @@ private:
     Selector* selector_;
     std::vector<Mat> means_;
     std::vector<Mat> stds_;
+
+    std::vector<Scalar> colours_; //for drawing crosshairs
+
+    double x_focal_ratio_;
+    double y_focal_ratio_;
+    double x_offset_;
+    double y_offset_;
 
     ros::NodeHandle node_handle_;
     ros::Publisher position_estimates_publisher_;

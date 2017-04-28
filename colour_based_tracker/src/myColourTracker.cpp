@@ -49,14 +49,17 @@ void drawObject(int x, int y, Mat &frame, std::string objectName) {
 	//on your tracked image!
 
     Scalar colour;
+
     if (objectName=="Green Box")
-        colour = Scalar(0, 255, 0);
-    if (objectName=="Orange Box")
-        colour = Scalar(0, 128, 255);
-    if (objectName=="White Box")
-        colour = Scalar(128, 128, 128);
+        colour = Scalar(0, 192, 0);
+    if (objectName=="Red Box")
+        colour = Scalar(0, 0, 255);
+    if (objectName=="Blue Box")
+        colour = Scalar(255, 128, 0);
     if (objectName=="Yellow Box")
         colour = Scalar(0, 255, 255);
+    if (objectName=="Purple Box")
+        colour = Scalar(255, 0, 128);
 
 	circle(frame, Point(x, y), 20, colour, 2);
 	if (y - 25>0)
@@ -74,6 +77,50 @@ void drawObject(int x, int y, Mat &frame, std::string objectName) {
 
 	putText(frame, objectName + intToString(x) + "," + intToString(y), Point(x, y + 30), 1, 1, colour, 2);
 
+}
+
+void drawObject(int x, int y, Mat &frame, std::string objectName, Scalar colour) {
+	//use some of the openCV drawing functions to draw crosshairs
+	//on your tracked image!
+
+	circle(frame, Point(x, y), 20, colour, 2);
+
+	if (y - 25>0)
+		line(frame, Point(x, y), Point(x, y - 25), colour, 2);
+	else line(frame, Point(x, y), Point(x, 0), colour, 2);
+	if (y + 25<FRAME_HEIGHT)
+		line(frame, Point(x, y), Point(x, y + 25), colour, 2);
+	else line(frame, Point(x, y), Point(x, FRAME_HEIGHT), colour, 2);
+	if (x - 25>0)
+		line(frame, Point(x, y), Point(x - 25, y), colour, 2);
+	else line(frame, Point(x, y), Point(0, y), colour, 2);
+	if (x + 25<FRAME_WIDTH)
+		line(frame, Point(x, y), Point(x + 25, y), colour, 2);
+	else line(frame, Point(x, y), Point(FRAME_WIDTH, y), colour, 2);
+
+	putText(frame, objectName, Point(x, y + 30), 1, 1, colour, 2);// + intToString(x) + "," + intToString(y)
+}
+
+void drawObject(int x, int y, Mat &frame, std::string objectName, Scalar colour, int frame_height, int frame_width) {
+	//use some of the openCV drawing functions to draw crosshairs
+	//on your tracked image!
+
+	circle(frame, Point(x, y), 20, colour, 2);
+
+	if (y - 25>0)
+		line(frame, Point(x, y), Point(x, y - 25), colour, 2);
+	else line(frame, Point(x, y), Point(x, 0), colour, 2);
+	if (y + 25<frame_height)
+		line(frame, Point(x, y), Point(x, y + 25), colour, 2);
+	else line(frame, Point(x, y), Point(x, frame_height), colour, 2);
+	if (x - 25>0)
+		line(frame, Point(x, y), Point(x - 25, y), colour, 2);
+	else line(frame, Point(x, y), Point(0, y), colour, 2);
+	if (x + 25<frame_width)
+		line(frame, Point(x, y), Point(x + 25, y), colour, 2);
+	else line(frame, Point(x, y), Point(frame_width, y), colour, 2);
+
+	putText(frame, objectName + intToString(x) + "," + intToString(y), Point(x, y + 30), 1, 1, colour, 2);
 }
 
 void mouse_callback(int  event, int  x, int  y, int  flag, void *param) {
@@ -95,17 +142,27 @@ ColourTrackerNode::ColourTrackerNode(
             int tracker_params[5],
             std::vector<int> crop_range,
             std::vector<double> resize_coeffs,
-            int particle_filter_downsampling) : 
+            int particle_filter_downsampling,
+            double std_coeff,
+            sensor_msgs::CameraInfo rgb_cinfo,
+            sensor_msgs::CameraInfo depth_cinfo) : 
                     node_handle_("~"),
+                    object_names_(object_names),
                     crop_range_(crop_range),
                     resize_coeffs_(resize_coeffs),
                     particle_filter_downsampling_
                         (particle_filter_downsampling),
-                    num_objects_(hsv_ranges.size())
+                    num_objects_(object_names.size()),
+                    std_coeff_(std_coeff)
 {
+    std::cout << "Creating Colour Based Tracker Node\n";
     for (int i = 0; i < hsv_ranges.size(); i++) {
         ThingToFind box(hsv_ranges[i], object_names[i]);
         boxes_.push_back(box);
+        Mat temp_colour(1, 1, CV_8UC3);
+        temp_colour.at<Vec3b>(Point(0,0)) = Vec3b((hsv_ranges[i][0]+hsv_ranges[i][1])/2, (hsv_ranges[i][2]+hsv_ranges[i][3])/2, (hsv_ranges[i][4]+hsv_ranges[i][5])/2);
+        cvtColor(temp_colour, temp_colour, COLOR_HSV2BGR);
+        colours_.push_back(Scalar(temp_colour.at<Vec3b>(Point(0,0))[0],temp_colour.at<Vec3b>(Point(0,0))[1],temp_colour.at<Vec3b>(Point(0,0))[2]));
     }
 
     std::vector<int> temp;
@@ -145,11 +202,17 @@ ColourTrackerNode::ColourTrackerNode(
         namedWindow(windowName, WINDOW_AUTOSIZE);
     if (!hsv_ranges_available_)
         selector_ = new Selector(windowName.c_str());
+
+    //Colour to depth matching parameters
+    x_focal_ratio_ = depth_cinfo.P[0] / rgb_cinfo.P[0];
+    y_focal_ratio_ = depth_cinfo.P[5] / rgb_cinfo.P[5];
+    x_offset_ = depth_cinfo.P[2] - (rgb_cinfo.P[2]-crop_range_[0]) * x_focal_ratio_;
+    y_offset_ = depth_cinfo.P[6] - (rgb_cinfo.P[6]-crop_range_[1]) * y_focal_ratio_;
 }
 
 
 void ColourTrackerNode::colour_tracker_callback(const sensor_msgs::ImageConstPtr& ros_image)
-{
+{ 
     Mat cameraFeed;
     try {
         (cv_bridge::toCvShare(ros_image,"bgr8")->image).copyTo(cameraFeed);
@@ -160,6 +223,23 @@ void ColourTrackerNode::colour_tracker_callback(const sensor_msgs::ImageConstPtr
     Rect r1(crop_range_[0], crop_range_[1], crop_range_[2], crop_range_[3]);
     cameraFeed = cameraFeed(r1);
     doStuff(cameraFeed);
+}
+
+
+void ColourTrackerNode::depth_tracker_callback(const sensor_msgs::ImageConstPtr& ros_image)
+{
+    std::lock_guard<std::mutex> lock_input(depth_mutex_);
+    try {
+        (cv_bridge::toCvShare(ros_image,"")->image).copyTo(depth_image_);
+        depth_available_ = true;
+    }
+    catch (cv_bridge::Exception& e) {
+        ROS_ERROR("Could not convert from '%s' to 'bgr8'.", ros_image->encoding.c_str());
+    }
+    //std::cout << "MPLUUUUUU: " << depth_image_.at<float>((int)(50*2.964-58.6699-12),(int)(10*2.964+92.785+80)) << "\n";
+    //int pt = ((int)(10*2.964+92.785+80) + ros_image->width * (int)(50*2.964-58.6699-12));
+    //float *p = (float*)(ros_image->data.data()+4*pt);
+    //std::cout << "MPLEEEEEE: " << *p << "\n";
 }
 
 
@@ -187,9 +267,11 @@ void ColourTrackerNode::publish() {
     
     object_assembly_msgs::Input input;
     for (int i = 0; i < num_objects_; i++) {
-        input.input.push_back(resize_coeffs_[0]*points.points[i].x/particle_filter_downsampling_);
-        input.input.push_back(resize_coeffs_[1]*points.points[i].y/particle_filter_downsampling_);
-        input.input.push_back(0.7); //TODO remove this line
+        //input.input.push_back(resize_coeffs_[0]*points.points[i].x/particle_filter_downsampling_);
+        //input.input.push_back(resize_coeffs_[1]*points.points[i].y/particle_filter_downsampling_);
+        input.input.push_back((points.points[i].x*x_focal_ratio_+x_offset_)/particle_filter_downsampling_);
+        input.input.push_back((points.points[i].y*y_focal_ratio_+y_offset_)/particle_filter_downsampling_);
+        input.input.push_back(0.8); //TODO remove this line
     }
     for (int i = 0; i < num_objects_; i++) {
         input.input.push_back(scores_[i]);
@@ -327,6 +409,12 @@ void ColourTrackerNode::doStuff(Mat &cameraFeed) {
         //setMouseCallback(windowName, mouse_callback);
     if (hsv_ranges_available_)
     {
+        if (depth_available_)
+        {
+            std::lock_guard<std::mutex> lock_input(depth_mutex_);
+            Mat in[] = {depth_image_, depth_image_, depth_image_};
+            merge(in, 3, depth_3c_);
+        }
         //repeat for all objects
         for (int obj = 0; obj < num_objects_; obj++) {
             for (int i = 0; i < 6; i++)
@@ -353,27 +441,51 @@ void ColourTrackerNode::doStuff(Mat &cameraFeed) {
                     y_estimate_[obj] = (double)y_[obj];
                 }
                 //draw object location on screen
-                drawObject((int)x_estimate_[obj], (int)y_estimate_[obj], cameraFeed, objectName_);
+                //drawObject((int)x_estimate_[obj], (int)y_estimate_[obj], cameraFeed, objectName_);
+                drawObject((int)x_estimate_[obj], (int)y_estimate_[obj], cameraFeed, objectName_, colours_[obj]);
+                if (depth_available_)
+                {
+                    //std::cout << "MPLAAAAAAA: " << obj << " " << depth_image_.at<float>((int)(y_estimate_[obj]*2.964-58.6699-12),(int)(x_estimate_[obj]*2.964+92.785+80)) << "\n"; 
+                    drawObject((int)(x_estimate_[obj]*x_focal_ratio_+x_offset_), (int)(y_estimate_[obj]*y_focal_ratio_+y_offset_), depth_3c_, objectName_, colours_[obj], 540, 1700);
+                }
             }
         }
 
         publish();
 
+        if (depth_available_)
+        {
+            imshow("Depth Image", depth_3c_);
+        }
+
+
     }
     else
     {
-        if (selector_->calculate_ranges(HSV_, means_, stds_) >= num_objects_)
+        Mat rgb[3];
+        split(cameraFeed, rgb);
+        Mat mask = rgb[0] != 0;
+        bitwise_or(rgb[1]!=0, mask, mask);
+        bitwise_or(rgb[2]!=0, mask, mask);
+        //imshow("maskkk", mask);
+        if (selector_->calculate_ranges(HSV_, means_, stds_, mask) >= num_objects_)
         {
             hsv_ranges_available_ = true;
             for (int obj = 0; obj < num_objects_; obj++)
             {
-                boxes_[obj].values[0] = (int)(means_[obj].at<double>(0,0) - std_coeff_ * stds_[obj].at<double>(0,0));
-                boxes_[obj].values[2] = (int)(means_[obj].at<double>(1,0) - std_coeff_ * stds_[obj].at<double>(1,0));
-                boxes_[obj].values[4] = (int)(means_[obj].at<double>(2,0) - std_coeff_ * stds_[obj].at<double>(2,0));
-                boxes_[obj].values[1] = (int)(means_[obj].at<double>(0,0) + std_coeff_ * stds_[obj].at<double>(0,0));
-                boxes_[obj].values[3] = (int)(means_[obj].at<double>(1,0) + std_coeff_ * stds_[obj].at<double>(1,0));
-                boxes_[obj].values[5] = (int)(means_[obj].at<double>(2,0) + std_coeff_ * stds_[obj].at<double>(2,0));
+                ThingToFind box(std::vector<int>(6,0), object_names_[obj]);
+                box.values[0] = (int)(means_[obj].at<double>(0,0) - std_coeff_ * stds_[obj].at<double>(0,0));
+                box.values[2] = (int)(means_[obj].at<double>(1,0) - std_coeff_ * stds_[obj].at<double>(1,0));
+                box.values[4] = (int)(means_[obj].at<double>(2,0) - std_coeff_ * stds_[obj].at<double>(2,0));
+                box.values[1] = (int)(means_[obj].at<double>(0,0) + std_coeff_ * stds_[obj].at<double>(0,0));
+                box.values[3] = (int)(means_[obj].at<double>(1,0) + std_coeff_ * stds_[obj].at<double>(1,0));
+                box.values[5] = (int)(means_[obj].at<double>(2,0) + std_coeff_ * stds_[obj].at<double>(2,0));
+                boxes_.push_back(box);
 std::cout << "VAL: " << boxes_[obj].values[0] << " to " << boxes_[obj].values[1] << "\n";
+                Mat temp_colour(1, 1, CV_8UC3);
+                temp_colour.at<Vec3b>(Point(0,0)) = Vec3b((minmax_[0]+minmax_[1])/2, (minmax_[2]+minmax_[3])/2, (minmax_[4]+minmax_[5])/2);
+                cvtColor(temp_colour, temp_colour, COLOR_HSV2BGR);
+                colours_.push_back(Scalar(temp_colour.at<Vec3b>(Point(0,0))[0],temp_colour.at<Vec3b>(Point(0,0))[1],temp_colour.at<Vec3b>(Point(0,0))[2]));
             }
         }
     }
@@ -414,7 +526,7 @@ int main(int argc, char* argv[]) {
         std::string object_name;
         nh.getParam(object_pre + "name", object_name);
         object_names.push_back(object_name);
-        if (flags[5])
+        if (!flags[5])
         {
             std::vector<int> hsv_range;
             nh.getParam(object_pre + "hsv_range", hsv_range);
@@ -440,10 +552,23 @@ int main(int argc, char* argv[]) {
     }
     int particle_filter_downsampling;
     nh.getParam("particle_filter_downsampling", particle_filter_downsampling);
+    double std_coeff = 1.0;
+    nh.getParam("std_coefficient", std_coeff);
 
-    ColourTrackerNode colour_tracker_node(object_names, hsv_ranges, flags, tracker_params, crop_range, resize_coeffs, particle_filter_downsampling);
+    std::string rgb_camera_info_topic, depth_camera_info_topic;
+    nh.getParam("rgb_camera_info_topic", rgb_camera_info_topic);
+    nh.getParam("depth_camera_info_topic", depth_camera_info_topic);
+std::cout << "waiting for topic: " << rgb_camera_info_topic << "\n";
+    sensor_msgs::CameraInfo rgb_cinfo = *ros::topic::waitForMessage<sensor_msgs::CameraInfo>(rgb_camera_info_topic);
+std::cout << "waiting for topic: " << depth_camera_info_topic << "\n";
+    sensor_msgs::CameraInfo depth_cinfo = *ros::topic::waitForMessage<sensor_msgs::CameraInfo>(depth_camera_info_topic);
+std::cout << "Got topics\n";
+
+    ColourTrackerNode colour_tracker_node(object_names, hsv_ranges, flags, tracker_params, crop_range, resize_coeffs, particle_filter_downsampling, std_coeff, rgb_cinfo, depth_cinfo);
 
     ros::Subscriber subscriber = nh.subscribe(camera_topic, 1, &ColourTrackerNode::colour_tracker_callback, &colour_tracker_node);
+
+    ros::Subscriber depth_subscriber = nh.subscribe("/image_crop/cropped_imageINVALID", 1, &ColourTrackerNode::depth_tracker_callback, &colour_tracker_node);
 
     ros::spin();
 }

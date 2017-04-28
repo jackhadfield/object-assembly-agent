@@ -9,24 +9,10 @@
 
 #include <assembly_task_guidance_mode.hpp>
 
-//#include <fl/util/profiling.hpp>
-
-//#include <opi/interactive_marker_initializer.hpp>
-//#include <osr/free_floating_rigid_bodies_state.hpp>
-//#include <dbot/util/camera_data.hpp>
-//#include <dbot/tracker/rms_gaussian_filter_object_tracker.hpp>
-//#include <dbot/tracker/builder/rms_gaussian_filter_tracker_builder.hpp>
-
 #include <dbot_ros_msgs/ObjectsState.h>
 #include <object_assembly_msgs/FetchSurfaceParams.h>
 #include <object_assembly_msgs/ConnectionInfoList.h>
-//#include <dbot_ros/utils/ros_interface.hpp>
-//#include <dbot_ros/utils/ros_camera_data_provider.hpp>
 
-//#include "opencv2/core/eigen.hpp"
-//#include "opencv2/opencv.hpp"
-
-//TODO publish current subtask
 class AssemblyAgentNode
 {
 
@@ -38,6 +24,15 @@ public:
         std::cout << "Creating Assembly Agent Node\n";
 
         connection_list_publisher_ = node_handle_.advertise<object_assembly_msgs::ConnectionInfoList>(connection_info_list_topic, 0);
+        connection_vector_publisher_ = node_handle_.advertise<object_assembly_msgs::ConnectionVector>("connection_vector", 0);
+    }
+
+    void publish_connection_vector(int current_subtask)
+    {
+        object_assembly_msgs::ConnectionVector connection_vector_msg;
+        for (int i = 0; i < connection_list_.size(); i++)
+            connection_vector_msg.v.push_back((char)(i < current_subtask));
+        connection_vector_publisher_.publish(connection_vector_msg);
     }
 
     void assembly_agent_callback(const dbot_ros_msgs::ObjectsState& state)
@@ -55,24 +50,22 @@ public:
         else
         {
             std::cout << task_.subtask_description(current_subtask) << " (subtask: " << current_subtask+1 << ")\n";
-            object_assembly_msgs::ConnectionInfoList connections_msg;
-            for (int i = 0; i < current_subtask + 1; i++)
-                connections_msg.connections.push_back(
-                                        connection_list_[i]);
-            connection_list_publisher_.publish(connections_msg);
         }
-
+        object_assembly_msgs::ConnectionInfoList connections_msg;
+        connections_msg.connections = connection_list_;
+        connection_list_publisher_.publish(connections_msg);
+        publish_connection_vector(current_subtask);
     }
 
 private:
     AssemblyTask task_;
-    //int max_particles_;
     ros::NodeHandle node_handle_;
     std::vector<std::string> object_names_;
     std::vector<geometry_msgs::Pose> current_object_poses_;
     geometry_msgs::Pose current_relative_pose_;
     std::vector<object_assembly_msgs::ConnectionInfo> connection_list_;
     ros::Publisher connection_list_publisher_;
+    ros::Publisher connection_vector_publisher_;
 };
 
 
@@ -87,11 +80,11 @@ int main(int argc, char** argv)
     nh.getParam("surface_params_service", surface_params_service);
     ros::ServiceClient client = nh.serviceClient<object_assembly_msgs::FetchSurfaceParams>(surface_params_service);
     object_assembly_msgs::FetchSurfaceParams srv;
-    srv.request.recalculate = false;
+    srv.request.recalculate = true;
     while (!client.call(srv))
     {
         ROS_ERROR("Failed to call background removal service. Trying again...");
-        usleep(500);
+        usleep(1000000);
     }
     up_vector.setX(srv.response.surface_parameters.a1);
     up_vector.setY(-1.0);
@@ -120,6 +113,14 @@ int main(int argc, char** argv)
     std::vector<object_assembly_msgs::ConnectionInfo> connection_list;
     // get task data
     nh.getParam("number_of_subtasks", num_subtasks);
+    int N;
+    nh.getParam("N", N);
+    double ymax;
+    nh.getParam("ymax", ymax);
+    int max_particles;
+    nh.getParam("max_particles", max_particles);
+    int all_particles;
+    nh.getParam("all_particles", all_particles);
 
     std::vector<std::vector<int>> connection_pairs;
 
@@ -135,8 +136,8 @@ int main(int argc, char** argv)
         nh.getParam(subtask_pre + "description", description);
         descriptions.push_back(description);
 
-	    nh.getParam(subtask_pre + "object", first_object);
-	    nh.getParam(subtask_pre + "relative_object", second_object);
+	    nh.getParam(subtask_pre + "object", second_object);
+	    nh.getParam(subtask_pre + "relative_object", first_object);
 	    nh.getParam(subtask_pre + "connection_type", connection_type);
         --first_object;
         --second_object;
@@ -171,15 +172,18 @@ int main(int argc, char** argv)
                                 margin,
     				            connection_type,
                                 object_symmetries,
-                                up_vector);
+                                max_particles,
+                                up_vector,
+                                N,
+                                ymax);
 	    subtasks.push_back(subtask);
 
         //build connection messages to save time later
         //TODO move to AssemblyAgentNode, because the relative pose
         //in the message should change when objects are symmetrical
         object_assembly_msgs::ConnectionInfo connection;
-        connection.part = first_object;
-        connection.relative_part = second_object;
+        connection.part = second_object;
+        connection.relative_part = first_object;
         connection.relative_pose.position.x = relative_pose[0];
         connection.relative_pose.position.y = relative_pose[1];
         connection.relative_pose.position.z = relative_pose[2];
@@ -188,14 +192,13 @@ int main(int argc, char** argv)
         connection.relative_pose.orientation.z = relative_pose[5];
         connection.relative_pose.orientation.w = relative_pose[6];
         connection.num_particles = 0;
-        connection.first_particle = 0;
+        connection.first_particle = (i-1)*max_particles;
         connection_list.push_back(connection);
     }
 
-    int max_particles;
-    nh.getParam("max_particles", max_particles);
+    bool cubic = (object_symmetries[0]=="cubic");
 
-    AssemblyTask task(object_names.size(), connection_pairs, num_subtasks, subtasks, max_particles, descriptions);
+    AssemblyTask task(object_names.size(), connection_pairs, num_subtasks, subtasks, max_particles, all_particles, descriptions, cubic);
 
     std::string connection_info_list_topic;
     nh.getParam("connection_info_list_topic",

@@ -1,3 +1,6 @@
+#ifndef LEARNING_MODE_UI_HPP
+#define LEARNING_MODE_UI_HPP
+
 #include <vector>
 #include <iostream>
 #include <string>
@@ -17,3 +20,5 @@ public:
 };
 
 LearningModeUI *ui_global;
+
+#endif //LEARNING_MODE_UI_HPP

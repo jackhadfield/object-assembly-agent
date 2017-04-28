@@ -88,27 +88,4 @@ void LearningModeUI::onIdle()
 {
 
 }
-/*
-int main(int argc, char* argv[])
-{
-    std::vector<std::string> filenames;
-    filenames.push_back("/home/jack/catkin_ws/src/object_assembly_ros/resource/cube.obj");
-    filenames.push_back("/home/jack/catkin_ws/src/object_assembly_ros/resource/cube.obj");std::cout << "1\n";
-    GuessModeUI ui(filenames);
-    ui_global = &ui;
-    tf::Transform t1;
-    t1.setIdentity();
-    t1.setOrigin(tf::Vector3(0.1,0,1));
-    std::vector<tf::Transform> new_poses;
-    new_poses.push_back(t1);
-    t1.setOrigin(tf::Vector3(-0.1,0,1));
-    new_poses.push_back(t1);
-    ui.update_poses(new_poses);
-    for (int i = 0; i < ui.meshes_.size(); i++)
-    {
-        for (int j = 0; j < ui.meshes_[i].vertices.size(); j++)
-            ui.meshes_[i].set_uniform_colour(glm::vec3(0.3,0.3,0.0));
-    }
-    ui.gui_main(argc, argv);
-}
-*/
+

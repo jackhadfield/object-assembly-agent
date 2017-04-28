@@ -39,7 +39,7 @@ class BackgroundRemovalNode {
 
 public:
 
-    BackgroundRemovalNode(float max_depth, float surf_thresh, bool recalculate_surface_params, std::string clustering_type, CropInfo crop_info, bool crop_for_table_detection);
+    BackgroundRemovalNode(float max_depth, float surf_thresh, bool recalculate_surface_params, std::string clustering_type, CropInfo crop_info, bool crop_for_table_detection, bool show_table_mask);
 
     void CameraInfoCallback(const sensor_msgs::CameraInfo &cinfo);
 
@@ -110,6 +110,7 @@ private:
     int max_cropped_y_;
     bool recalculate_surface_params_;
     bool crop_for_table_detection_;
+    bool show_table_mask_;
 
     ros::NodeHandle node_handle_;
     ros::Publisher pointclouds_publisher_;

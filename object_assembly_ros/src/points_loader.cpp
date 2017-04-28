@@ -44,26 +44,12 @@ int main(int argc, char* argv[]) {
         0.5,-0.5,-0.5,0.5};
     int rand_ind[12];
     std::srand(time(NULL));
-
+//std::vector<int> v;
     for (int i=0;i<12;i++){
         rand_ind[i] = rand() % 24 ;
         std::cout << i << ": " << rand_ind[i] << "\n";
+        //v.push_back(rand_ind[i]);
     }
-
-/*
-    rand_ind[0] = 20;
-    rand_ind[1] = 2;
-    rand_ind[2] = 7;
-    rand_ind[3] = 18;
-    rand_ind[4] = 10;
-    rand_ind[5] = 2;
-    rand_ind[6] = 23;
-    rand_ind[7] = 2;
-    rand_ind[8] = 20;
-    rand_ind[9] = 17;
-    rand_ind[10] = 20;
-    rand_ind[11] = 12;
-*/
 
     int ind=0;
     for (int t=0;t<1200;t++)

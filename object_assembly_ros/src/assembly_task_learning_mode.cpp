@@ -8,6 +8,7 @@ AssemblyTask::AssemblyTask(
     int num_connections,
     std::vector<AssemblySubtask> subtasks,
     int max_particles,
+    int all_particles,
     std::vector<std::string> words,
     std::string english,
     std::string image_output_dir
@@ -18,6 +19,7 @@ AssemblyTask::AssemblyTask(
       num_connections_(num_connections),
       subtasks_(subtasks),
       max_particles_(max_particles),
+      all_particles_(all_particles),
       image_output_dir_(image_output_dir),
       words_shuffled_(words),
       english_(english)
@@ -49,25 +51,14 @@ bool AssemblyTask::evaluate_task(std::vector<tf::Transform> current_object_poses
             {
                 //neither part is connected to a third part
                 connection_status_vector_[i] = subtasks_[i].evaluate_subtask(current_object_poses, scores_[i]);
-                //std::cout << "(-1,-1): Just evaled subtask\n";
                 if (connection_status_vector_[i])
                 {
                     AssemblySubgraph new_subgraph;
                     new_subgraph.nodes.push_back(connection_pairs_[i][0]);
                     new_subgraph.nodes.push_back(connection_pairs_[i][1]);
-                    //new_subgraph.rotations.push_back(subtasks_[i].first_rotation);
-                    //new_subgraph.rotations.push_back(subtasks_[i].first_rotation * subtasks_[i].second_rotation);
                     rotations_[connection_pairs_[i][0]] = subtasks_[i].first_rotation;
                     rotations_[connection_pairs_[i][1]] = subtasks_[i].first_rotation * subtasks_[i].second_rotation;
                     rotations_[connection_pairs_[i][1]].normalize();
-                    //std::cout << "1st angle: " << subtasks_[i].first_rotation.getAngle() << "\n";
-                    //std::cout << "2nd angle: " << subtasks_[i].second_rotation.getAngle() << "\n";
-                    //std::cout << connection_pairs_[i][0] << " angle: " << rotations_[connection_pairs_[i][0]].getAngle() << "\n";
-                    //std::cout << connection_pairs_[i][1] << " angle: " << rotations_[connection_pairs_[i][1]].getAngle() << "\n";
-                    //std::cout << "1st: " << subtasks_[i].first_rotation.getAxis().getX() << " " << subtasks_[i].first_rotation.getAxis().getY() << " " << subtasks_[i].first_rotation.getAxis().getZ() << "\n";
-                    //std::cout << "2nd: " << subtasks_[i].second_rotation.getAxis().getX() << " " << subtasks_[i].second_rotation.getAxis().getY() << " " << subtasks_[i].second_rotation.getAxis().getZ() << "\n";
-                    //std::cin >> scores_[i];
-                    //subgraph_list_.push_back(new_subgraph);
                     part_subgraph_index_[connection_pairs_[i][0]] = ++subgraph_max_index_;
                     part_subgraph_index_[connection_pairs_[i][1]] = subgraph_max_index_;
                 }
@@ -79,19 +70,10 @@ bool AssemblyTask::evaluate_task(std::vector<tf::Transform> current_object_poses
                 subtasks_[i].set_first_object_symmetry("none");
                 tf::Quaternion prerotation = rotations_[connection_pairs_[i][0]].inverse();
                 subtasks_[i].set_prerotation(prerotation);
-                //std::cout << " angle = " << prerotation.getAngle() << "\n";
-                //std::cout << "axis = " << prerotation.getAxis().getX() << " " << prerotation.getAxis().getY() << " " << prerotation.getAxis().getZ() << "\n";
                 connection_status_vector_[i] = subtasks_[i].evaluate_subtask(current_object_poses, scores_[i]);
                 if (connection_status_vector_[i])
                 {
                     rotations_[connection_pairs_[i][1]] = rotations_[connection_pairs_[i][0]] * subtasks_[i].second_rotation;
-                    //std::cout << "2nd angle: " << subtasks_[i].second_rotation.getAngle() << "\n";
-                    //std::cout << connection_pairs_[i][0] << " angle: " << rotations_[connection_pairs_[i][0]].getAngle() << "\n";
-                    //std::cout << connection_pairs_[i][1] << " angle: " << rotations_[connection_pairs_[i][1]].getAngle() << "\n";
-                    //std::cout << "2nd: " << subtasks_[i].second_rotation.getAxis().getX() << " " << subtasks_[i].second_rotation.getAxis().getY() << " " << subtasks_[i].second_rotation.getAxis().getZ() << "\n";
-                    //std::cout << "prerot: " << rotations_[connection_pairs_[i][0]].getAxis().getX() << " " << rotations_[connection_pairs_[i][0]].getAxis().getY() << " " << rotations_[connection_pairs_[i][0]].getAxis().getZ() << "\n";
-                    //std::cin >> scores_[i];
-                    //subgraph_list_[subgraph_ind].nodes.push_back(connection_pairs_[i][1]);
                     part_subgraph_index_[connection_pairs_[i][1]] = subgraph_ind;
                 }
             }
@@ -106,7 +88,6 @@ bool AssemblyTask::evaluate_task(std::vector<tf::Transform> current_object_poses
                 if (connection_status_vector_[i])
                 {
                     rotations_[connection_pairs_[i][0]] = rotations_[connection_pairs_[i][1]] * subtasks_[i].first_rotation;
-                    //subgraph_list_[subgraph_ind].nodes.push_back(connection_pairs_[i][0]);
                     part_subgraph_index_[connection_pairs_[i][0]] = subgraph_ind;
                 }
             }
@@ -126,10 +107,8 @@ bool AssemblyTask::evaluate_task(std::vector<tf::Transform> current_object_poses
                     int subgraph_ind1 = part_subgraph_index_[connection_pairs_[i][1]];
                     for (int j = 0; j < num_parts_; j++)
                     {
-                        //subgraph_list_[subgraph_ind0].nodes.push_back(subgraph_list_[subgraph_ind1].nodes[j]);
                         if (part_subgraph_index_[j] == subgraph_ind1)
                             part_subgraph_index_[j] = subgraph_ind0;
-                        //part_subgraph_index_[subgraph_list_[subgraph_ind1].nodes[j]] = subgraph_ind0;
                     }
                 }
             }
@@ -137,12 +116,17 @@ bool AssemblyTask::evaluate_task(std::vector<tf::Transform> current_object_poses
         if (connection_status_vector_[i])
         {
             connection_list[i].relative_pose = subtasks_[i].connection_pose;
-            connection_list[i].num_particles = max_particles_;
+            connection_list[i].num_particles = all_particles_;
+            connection_list[i].first_particle = 0;
         }
-        if (scores_[i] >= 1.0/max_particles_)
+        else if (scores_[i] >= 1.0/max_particles_)
         {
             connection_list[i].relative_pose = subtasks_[i].connection_pose;
-            connection_list[i].num_particles = int(scores_[i] * max_particles_);
+            connection_list[i].num_particles = int(scores_[i] * max_particles_) < max_particles_ ? int(scores_[i] * max_particles_) + 1 : max_particles_;
+        }
+        else
+        {
+            connection_list[i].num_particles = 1;
         }
     }
     int count_ones = 0;

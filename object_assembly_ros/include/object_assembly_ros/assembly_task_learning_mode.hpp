@@ -10,6 +10,7 @@ public:
         int num_connections,
         std::vector<AssemblySubtask> subtasks,
         int max_particles,
+        int all_particles,
         std::vector<std::string> words,
         std::string english,
         std::string image_output_dir);
@@ -45,6 +46,7 @@ private:
     int subgraph_max_index_ = -1;
     std::vector<AssemblySubtask> subtasks_;
     int max_particles_;
+    int all_particles_;
     std::vector<std::vector<int>> connection_pairs_;
     std::vector<bool> connection_status_vector_;
     std::vector<AssemblySubgraph> subgraph_list_;

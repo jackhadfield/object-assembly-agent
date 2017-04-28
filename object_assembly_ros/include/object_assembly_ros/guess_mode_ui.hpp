@@ -1,3 +1,6 @@
+#ifndef GUESS_MODE_HPP
+#define GUESS_MODE_HPP
+
 #include <vector>
 #include <iostream>
 #include <string>
@@ -17,3 +20,5 @@ public:
 };
 
 GuessModeUI *ui_global;
+
+#endif //GUESS_MODE_HPP

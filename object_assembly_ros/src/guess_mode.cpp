@@ -20,29 +20,33 @@ class AssemblyAgentNode
 
 public:
 
-    AssemblyAgentNode(std::vector<std::string> object_names, std::vector<AssemblyTask> tasks, std::string connection_info_list_topic, std::vector<object_assembly_msgs::ConnectionInfo> connection_list, int argc, char** argv)
-        : object_names_(object_names), tasks_(tasks), connection_list_(connection_list), node_handle_("~"), num_tasks_(tasks.size()), argc_(argc), argv_(argv)
+    AssemblyAgentNode(std::vector<std::string> object_names, std::vector<AssemblyTask> tasks, std::string connection_info_list_topic, std::vector<object_assembly_msgs::ConnectionInfo> connection_list, int argc, char** argv, std::string mesh_dir, bool use_gui)
+        : object_names_(object_names), tasks_(tasks), connection_list_(connection_list), node_handle_("~"), num_tasks_(tasks.size()), argc_(argc), argv_(argv), use_gui_(use_gui)
     {
         std::cout << "Creating Assembly Agent Node\n";
 
         connection_list_publisher_ = node_handle_.advertise<object_assembly_msgs::ConnectionInfoList>(connection_info_list_topic, 0);
-
-        std::vector<std::string> filenames;
-        for(int i = 0; i< object_names_.size(); i++)
-            filenames.push_back("/home/jack/catkin_ws/src/object_assembly_ros/resource/cube.obj");
-        ui = new GuessModeUI(filenames);
-        for (int i = 0; i < ui->meshes_.size(); i++)
-        {
-            for (int j = 0; j < ui->meshes_[i].vertices.size(); j++)
-                ui->meshes_[i].set_uniform_colour(glm::vec3(0.3,0.15,0.0));
+std::cout << "use_gui: " << use_gui_ << "\n";
+	if(use_gui_)
+	{
+std::cout << "Making gui\n";
+	    std::vector<std::string> filenames;
+	    for(int i = 0; i< object_names_.size(); i++)
+	        filenames.push_back(mesh_dir);
+	    ui = new GuessModeUI(filenames);
+	    for (int i = 0; i < ui->meshes_.size(); i++)
+	    {
+	        for (int j = 0; j < ui->meshes_[i].vertices.size(); j++)
+	            ui->meshes_[i].set_uniform_colour(glm::vec3(0.3,0.15,0.0));
+	    }
+	    //This should be ok; a mutex is locked when entering new poses
+	    std::thread (BaseUI::gui_main_static, argc_, argv_).detach();
         }
-        //This should be ok; a mutex is locked when entering new poses
-        std::thread (BaseUI::gui_main_static, argc_, argv_).detach();
     }
 
     ~AssemblyAgentNode()
     {
-        delete ui;
+        if (use_gui_) delete ui;
     }
 
     double probability_from_densities(std::vector<double> &density, int i)
@@ -56,8 +60,8 @@ public:
         }
         else
         {
-            std::cerr << "Number of tasks not supported yet :(\n";
-            exit(1);
+            //std::cerr << "Number of tasks not supported yet :(\n";
+            //exit(1);
         }
         return 0.0;
     }
@@ -102,12 +106,11 @@ public:
             std::cout << "Task " << i+1 << " probability: " << probability_from_densities(density, i) << "\n";
         }
 // 1/3*x*y*z + 1/3*(1-x)*(1-y)*(1-z) + 1/2*x*y*(1-z) + 1/2*x*(1-y)*z + x*(1-y)*(1-z)
-
         object_assembly_msgs::ConnectionInfoList connections_msg;
         connections_msg.connections = connection_list_;
         connection_list_publisher_.publish(connections_msg);
 
-        ui->update_poses(tf_poses);
+        if (use_gui_) ui->update_poses(tf_poses);
     }
 
 private:
@@ -115,6 +118,7 @@ private:
     std::vector<AssemblyTask> tasks_;
     //int max_particles_;
     ros::NodeHandle node_handle_;
+    bool use_gui_;
     std::vector<std::string> object_names_;
     std::vector<geometry_msgs::Pose> current_object_poses_;
     geometry_msgs::Pose current_relative_pose_;
@@ -131,31 +135,36 @@ int main(int argc, char** argv)
 {
     ros::init(argc, argv, "assembly_agent");
     ros::NodeHandle nh("~");
+    std::srand ( unsigned ( std::time(0) ) );
 
     tf::Vector3 up_vector;
-/*
+
     std::string surface_params_service;
     nh.getParam("surface_params_service", surface_params_service);
     ros::ServiceClient client = nh.serviceClient<object_assembly_msgs::FetchSurfaceParams>(surface_params_service);
     object_assembly_msgs::FetchSurfaceParams srv;
-    srv.request.recalculate = false;
+    srv.request.recalculate = true;
     while (!client.call(srv))
     {
-        ROS_ERROR("Failed to call background removal service. Trying again...");
-        usleep(500000);
+        ROS_ERROR("Guess Mode failed to call background removal service. Trying again...");
+        usleep(1000000);
     }
     up_vector.setX(srv.response.surface_parameters.a1);
     up_vector.setY(-1.0);
     up_vector.setZ(srv.response.surface_parameters.a3);
-*/
+
     //TODO: REMOVE NEXT 3 LINES WHEN FINISHED EXPERIMENTING
+/*
     up_vector.setX(0.0);
     up_vector.setY(-1.0);
     up_vector.setZ(0.0);
     up_vector.normalize();
+*/
 
     std::vector<std::string> object_names;
+    std::string mesh_dir;
     std::vector<std::string> object_symmetries;
+    bool use_gui;
     std::vector<std::string> task_names;
     std::string object_pose_topic;
     std::vector<std::string> descriptions;
@@ -167,7 +176,9 @@ int main(int argc, char** argv)
     /* -     Read out data          - */
     /* ------------------------------ */
     nh.getParam("objects", object_names);
+    nh.getParam("mesh_dir", mesh_dir);
     nh.getParam("object_symmetries", object_symmetries);
+    nh.getParam("use_gui", use_gui);
     nh.getParam("object_pose_topic", object_pose_topic);
     nh.getParam("number_of_checks", num_checks);
     nh.getParam("number_of_tasks", num_tasks);
@@ -176,6 +187,13 @@ int main(int argc, char** argv)
     int max_particles;
     nh.getParam("max_particles", max_particles);
     max_particles = (int)(max_particles / num_tasks) * num_tasks;
+    int all_particles;
+    nh.getParam("all_particles", all_particles);
+    all_particles = (int)(all_particles / num_tasks) * num_tasks;
+    int N;
+    nh.getParam("N", N);
+    double ymax;
+    nh.getParam("ymax", ymax);
 
     std::vector<object_assembly_msgs::ConnectionInfo> connection_list;
     int connection_list_offset = 0;
@@ -208,7 +226,7 @@ int main(int argc, char** argv)
                                    relative_pose[5],
                                    relative_pose[6]);
             // subtask shorthand prefix
-            AssemblySubtask subtask(i-1,
+            AssemblySubtask subtask(j-1,
                                     num_checks,
                                     parts[0],
         				            parts[1],
@@ -218,13 +236,16 @@ int main(int argc, char** argv)
                                     margin,
         				            "place",
                                     object_symmetries,
-                                    up_vector);
+                                    max_particles/num_tasks,
+                                    up_vector,
+                                    N,
+                                    ymax);
 	        subtasks.push_back(subtask);
 
             //build connection messages to save time later
             object_assembly_msgs::ConnectionInfo connection;
-            connection.part = parts[0];
-            connection.relative_part = parts[1];
+            connection.part = parts[1];
+            connection.relative_part = parts[0];
             connection.relative_pose.position.x = relative_pose[0];
             connection.relative_pose.position.y = relative_pose[1];
             connection.relative_pose.position.z = relative_pose[2];
@@ -233,11 +254,12 @@ int main(int argc, char** argv)
             connection.relative_pose.orientation.z = relative_pose[5];
             connection.relative_pose.orientation.w = relative_pose[6];
             connection.num_particles = 0;
-            connection.first_particle = (i-1) * max_particles/num_tasks;
+            connection.first_particle = (i-1) * all_particles/num_tasks + ((j-1) * (all_particles/num_tasks - max_particles/num_tasks)) / (num_connections-1);
+            std::cout << "connection.first_particle (" << i << ", " << j << "): " << connection.first_particle << "\n";
             connection_list.push_back(connection);
         }
 
-        AssemblyTask task(object_names.size(), connection_pairs, num_connections, subtasks, max_particles/num_tasks, connection_list_offset, "connection_vector" + std::to_string(i));
+        AssemblyTask task(i-1, object_names.size(), connection_pairs, num_connections, subtasks, max_particles/num_tasks, all_particles/num_tasks, connection_list_offset, "connection_vector" + std::to_string(i));
         tasks.push_back(task);
 	    connection_list_offset += num_connections;
     }
@@ -247,7 +269,7 @@ int main(int argc, char** argv)
                 connection_info_list_topic);
 
     AssemblyAgentNode assembly_agent_node(object_names, tasks,
-                connection_info_list_topic, connection_list, argc, argv);
+                connection_info_list_topic, connection_list, argc, argv, mesh_dir, use_gui);
 
     ros::Subscriber subscriber = nh.subscribe(
         object_pose_topic, 1, &AssemblyAgentNode::assembly_agent_callback, &assembly_agent_node);

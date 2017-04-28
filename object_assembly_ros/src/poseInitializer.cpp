@@ -181,9 +181,10 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < num_objects; i++) {
         file_paths.push_back(directory + "/" + file_names[i]); 
     }
-std::cout << "Creating Pose Initialize Node...\n";
+
+    std::cout << "Creating Pose Initialize Node...\n";
     PoseInitializerNode pose_initializer_node(file_paths, num_objects, background_removal_service, frame_id);
-std::cout << "Created Pose Initialize Node\n";
+    std::cout << "Created Pose Initialize Node\n";
     ros::Subscriber subscriber_hmp = 
         nh.subscribe(camera_topic,
                      1,

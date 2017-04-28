@@ -11,7 +11,7 @@
 #include <GL/glew.h>
 #include <GL/glut.h>
 /* Using SDL2 for the base window and OpenGL context init */
-#include "SDL.h"
+//#include "SDL.h"
 /* Using SDL2_image to load PNG & JPG in memory */
 #include "SDL_image.h"
 

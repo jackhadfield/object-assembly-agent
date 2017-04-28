@@ -1,16 +1,18 @@
 #include "backgroundRemoval.hpp"
 
 //TODO: remove initial values of surface_params_ and set surface_params_found_ to false when ready
-BackgroundRemovalNode::BackgroundRemovalNode(float max_depth, float surf_thresh, bool recalculate_surface_params, std::string clustering_type, CropInfo crop_info, bool crop_for_table_detection) : node_handle_("~"), clustering_type_(clustering_type) {
+BackgroundRemovalNode::BackgroundRemovalNode(float max_depth, float surf_thresh, bool recalculate_surface_params, std::string clustering_type, CropInfo crop_info, bool crop_for_table_detection, bool show_table_mask) : node_handle_("~"), clustering_type_(clustering_type) {
     pointclouds_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>("TempPCL", 0);
     MAX_DEPTH_ = max_depth;
     SURF_THRESH_ = surf_thresh;
     recalculate_surface_params_ = recalculate_surface_params;
     crop_info_ = crop_info;
     crop_for_table_detection_ = crop_for_table_detection;
+    show_table_mask_ = show_table_mask;
     surface_params_[0] = -0.021108340472;
     surface_params_[1] = 0.308822542429;
     surface_params_[2] = -0.585311472416;
+    surface_params_found_ = false;
 }
 
 void BackgroundRemovalNode::callback(
@@ -136,8 +138,6 @@ void BackgroundRemovalNode::process_inputs() {
     }
     height_ = depth_image_.rows;
     width_ = depth_image_.cols;
-    //std::cout << "Image size: " << height_ << " x " << width_ <<"\n";
-    //std::cout << "Converting PCL type...\n";
     pcl::fromROSMsg(*pointcloud_ptr_, input_pointcloud_);
     if (input_pointcloud_.height != height_ ||
         input_pointcloud_.width != width_) {
@@ -145,28 +145,18 @@ void BackgroundRemovalNode::process_inputs() {
             Size(input_pointcloud_.width, input_pointcloud_.height));
         height_ = depth_image_.rows;
         width_ = depth_image_.cols;
-        //std::cout << "New image size: " << height_ << " x " << width_ <<"\n";
     }
     calculate_cropped_range();
 }
 
 void BackgroundRemovalNode::response() {
-    //object_assembly_msgs::PointCloudArray pcl_array;
-    //for (int i = 0; i < output_pointclouds_.size(); i++) {
-    //    sensor_msgs::PointCloud2 temp_pcl;
-    //    pcl::toROSMsg(output_pointclouds_[i], temp_pcl);
-    //    pcl_array.pointclouds.push_back(temp_pcl);
-    //}
-    //pointclouds_publisher_.publish(pcl_array);
 }
 
 
 void BackgroundRemovalNode::GetTableImage() {
 	//Perform distance transform on image gradient and threshold the result
-    //std::cout << "Getting table image...\n";
     Rect r1(0, 0, width_, height_ - 1);
     Rect r2(0, 1, width_, height_ - 1);
-    //std::cout << height_ << " x " << width_ <<"\n";
     Mat img_diff = Mat(height_ - 1, width_, CV_16UC1);
     absdiff(depth_image_(r1), depth_image_(r2), img_diff);
     Mat notzero = img_diff!=0;
@@ -190,7 +180,6 @@ void BackgroundRemovalNode::GetTableImage() {
     Mat mask2 = dist > 0.5;
     
     //Find contour with largest area
-    //std::cout << "Finding contours...\n";
     std::vector<std::vector<Point> > contours;
     std::vector<Vec4i> hierarchy;
     findContours(mask2, contours, CV_RETR_TREE,
@@ -205,32 +194,22 @@ void BackgroundRemovalNode::GetTableImage() {
     }
     Mat dst = Mat::zeros(height_, width_, CV_8UC1);
     Scalar colour(255);
-    //std::cout << "Drawing contours...\n";
     if (contours.size())
-        drawContours(dst, contours, maxAreaIndex, colour, FILLED, 8, hierarchy);
+        drawContours(dst, contours, maxAreaIndex, colour, -1, 8, hierarchy);
     table_mask_ = dst > 1;
-    //table_image_ = Mat(height_, width_, CV_16UC1);
-    //Mat mask3_16u;
-    //mask3.convertTo(mask3_16u, CV_16UC1);
-    //std::cout << "Normalizing...\n";
-    //normalize(mask3_16u, mask3_16u, 0, 1., NORM_MINMAX);
-    //multiply(mask3_16u, depth_image_, table_image_);
-    //mask3.copyTo(table_mask_);
-    //namedWindow("Table image", WINDOW_AUTOSIZE);
-    //imshow("Table image", table_mask_);
-    //waitKey(30);
 }
 
 
 int BackgroundRemovalNode::GetFlatSurfaceParams() {
-    //std::cout << "Getting surface params...\n";
     GetTableImage();
-    namedWindow("Table mask", WINDOW_AUTOSIZE);
-    imshow("Table mask", table_mask_);
-    waitKey(30);
+    if (show_table_mask_)
+    {
+        namedWindow("Table mask", WINDOW_AUTOSIZE);
+        imshow("Table mask", table_mask_);
+        waitKey(30);
+    }
     std::vector<Point3f> xyzCoords;
     int point_count = 0;
-    //std::cout << "Saving table points...\n";
 
     for (int i = 0; i < height_*width_; i++) {
         if (!std::isnan(input_pointcloud_.points[i].x) && table_mask_.at<unsigned char>(int(i/width_+0.0001),i%width_)!=0) {
@@ -239,29 +218,7 @@ int BackgroundRemovalNode::GetFlatSurfaceParams() {
         }
 	}
 
-    /*Test Block...
-    pcl::PointCloud<pcl::PointXYZ> output_pointcloud;
-    //output_pointcloud.width = point_count;
-    //output_pointcloud.height = 1;
-    //output_pointcloud.is_dense = false;
-    //output_pointcloud.points.resize(point_count);
-    for (int i = 0; i < point_count; i++) {
-        output_pointcloud.push_back(pcl::PointXYZ(xyzCoords[i].x, xyzCoords[i].y, xyzCoords[i].z));
-        //output_pointcloud.points[i].x=xyzCoords[i].x;
-        //output_pointcloud.points[i].y=xyzCoords[i].y;
-        //output_pointcloud.points[i].z=xyzCoords[i].z;
-    }
-    //for (int i = 0; i < height_*width_; i++) {
-    //    output_pointcloud.push_back(input_pointcloud_.points[i]);
-    //}
-    sensor_msgs::PointCloud2 temp_pcl;
-    pcl::toROSMsg(output_pointcloud, temp_pcl);
-    temp_pcl.header.frame_id = "camera_depth_optical_frame";
-    pointclouds_publisher_.publish(temp_pcl);
-    ...Remove when finished*/
-
     if (point_count == 0) return -1;
-	//std::cout << "Solving Least Squares (" << point_count << " points)...\n";
     Mat p = Mat(xyzCoords).reshape(1);
     Mat q = Mat::ones(point_count, 3, CV_32F);
     p.col(0).copyTo(q.col(0));
@@ -272,9 +229,7 @@ int BackgroundRemovalNode::GetFlatSurfaceParams() {
     surface_params_[0] = params.at<float>(0, 0);
     surface_params_[1] = params.at<float>(1, 0);
     surface_params_[2] = params.at<float>(2, 0);
-    //std::cout << "Surface params: " << params << "\n";
 
-    //std::cout << "SVD done...\n";
     return 0;
 }
 
@@ -311,7 +266,6 @@ int BackgroundRemovalNode::ImageSegmentation() {
     std::vector<Point3f> foregroundCoords;
     std::vector<int> foreground_ind;
     int foreground_pixels_num = 0;
-    //std::cout << "Separating foreground...\n";
     for (int i = 0; i < height_*width_; i++) {
         if (input_pointcloud_.points[i].y < (surface_params_[0]*input_pointcloud_.points[i].x + surface_params_[2]*input_pointcloud_.points[i].z + surface_params_[1]) - SURF_THRESH_ && input_pointcloud_.points[i].z < MAX_DEPTH_ && in_cropped_frame(i)) {
             foregroundCoords.push_back(Point3f(input_pointcloud_.points[i].x, input_pointcloud_.points[i].y, input_pointcloud_.points[i].z));
@@ -323,13 +277,11 @@ int BackgroundRemovalNode::ImageSegmentation() {
     Mat centers, labels;
     if (foreground_pixels_num == 0) return -1;
     if (clustering_type_ == "kmeans") {
-        //std::cout << "K-Means...\n";
         kmeans(foregroundCoords, NUM_OBJECTS_, labels,
                TermCriteria(TermCriteria::EPS+TermCriteria::COUNT,10,1.0), 
                KMEANS_NUM_ATTEMPTS_, KMEANS_PP_CENTERS, centers);
     }
     else {
-        //std::cout << "DBSCAN...\n";
         clustering::DBSCAN<Eigen::VectorXf, Eigen::MatrixXf> dbscan(0.2, 20); //TODO pass params
         Mat coords_cv = Mat(foregroundCoords).reshape(1);
         Eigen::MatrixXf coords_eigen;
@@ -357,7 +309,7 @@ int BackgroundRemovalNode::ImageSegmentation(object_assembly_msgs::Points2D poin
     std::vector<Point3f> foregroundCoords;
     std::vector<int> foreground_ind;
     int foreground_pixels_num = 0;
-    //std::cout << "Separating foreground...\n";
+
     for (int i = 0; i < height_*width_; i++) {
         if (input_pointcloud_.points[i].y < (surface_params_[0]*input_pointcloud_.points[i].x + surface_params_[2]*input_pointcloud_.points[i].z + surface_params_[1]) - SURF_THRESH_ && input_pointcloud_.points[i].z < MAX_DEPTH_ && in_cropped_frame(i)) {
             foregroundCoords.push_back(Point3f(input_pointcloud_.points[i].x, input_pointcloud_.points[i].y, input_pointcloud_.points[i].z));
@@ -390,7 +342,9 @@ int BackgroundRemovalNode::ImageSegmentation(object_assembly_msgs::Points2D poin
                 }
             }
             if (valid_points_found) {
-                mean_position /= valid_points;
+                mean_position.x = mean_position.x/valid_points;
+		        mean_position.y = mean_position.y/valid_points;
+		        mean_position.z = mean_position.z/valid_points;
                 centers.at<float>(i,0) = mean_position.x;
                 centers.at<float>(i,1) = mean_position.y;
                 centers.at<float>(i,2) = mean_position.z;
@@ -400,13 +354,11 @@ int BackgroundRemovalNode::ImageSegmentation(object_assembly_msgs::Points2D poin
     }
     if (foreground_pixels_num == 0) return -1;
     if (clustering_type_ == "kmeans") {
-        //std::cout << "K-Means...\n";
         kmeans(foregroundCoords, NUM_OBJECTS_, labels,
                TermCriteria(TermCriteria::EPS+TermCriteria::COUNT,10,1.0), 
                1, KMEANS_PP_CENTERS, centers);
     }
     else {
-        //std::cout << "DBSCAN...\n";
         clustering::DBSCAN<Eigen::VectorXf, Eigen::MatrixXf> dbscan(0.02, 20); //TODO pass params
         Mat coords_cv = Mat(foregroundCoords).reshape(1);
         Eigen::MatrixXf coords_eigen;
@@ -414,7 +366,6 @@ int BackgroundRemovalNode::ImageSegmentation(object_assembly_msgs::Points2D poin
         dbscan.fit(coords_eigen);
         std::vector<int> dbscan_labels = dbscan.get_labels();
         labels = Mat(dbscan_labels).reshape(1);
-        //std::cout << "labels: " << labels << "\n";
     }
     labels.copyTo(labels_);
     foreground_ind_ = foreground_ind;
@@ -433,10 +384,6 @@ void BackgroundRemovalNode::createOutputPCLs() {
     }
     foreground_pcl.header.frame_id = "kinect2_rgb_optical_frame";
     pointclouds_publisher_.publish(foreground_pcl);
-    //std::cout << "0: " << output_pointclouds_[0].size() << "\n";
-    //std::cout << "1: " << output_pointclouds_[1].size() << "\n";
-    //std::cout << "2: " << output_pointclouds_[2].size() << "\n";
-    //std::cout << "3: " << output_pointclouds_[3].size() << "\n";
 }
 
 
@@ -478,7 +425,10 @@ int main(int argc, char* argv[]) {
     bool crop_for_table_detection;
     nh.getParam("crop_for_table_detection", crop_for_table_detection);
 
-    BackgroundRemovalNode background_removal_node(max_depth, surf_thresh, recalculate_surface_params, clustering_type, crop_info, crop_for_table_detection);
+    bool show_table_mask;
+    nh.getParam("show_table_mask", show_table_mask);
+
+    BackgroundRemovalNode background_removal_node(max_depth, surf_thresh, recalculate_surface_params, clustering_type, crop_info, crop_for_table_detection, show_table_mask);
 
     message_filters::Subscriber<sensor_msgs::Image> depth_image_sub(nh, depth_image_topic, 1);
     message_filters::Subscriber<sensor_msgs::PointCloud2> point_cloud_sub(nh, point_cloud_topic, 1);
