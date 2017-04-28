@@ -1,3 +1,6 @@
+#ifndef BASE_UI_HPP
+#define BASE_UI_HPP
+
 #include <vector>
 #include <iostream>
 #include <string>
@@ -318,13 +321,13 @@ int BaseUI::gui_main(int argc, char* argv[]) {
     char f_shader_filename[128];
     if (!use_png_texture)
     {
-        std::strcpy(v_shader_filename, "/home/jack/catkin_ws/phong-shading.v.glsl");
-        std::strcpy(f_shader_filename, "/home/jack/catkin_ws/phong-shading.f.glsl");
+        std::strcpy(v_shader_filename, "/home/jack/code_test2/catkinws2/src/object_assembly_ros/resource/phong-shading.v.glsl");
+        std::strcpy(f_shader_filename, "/home/jack/code_test2/catkinws2/src/object_assembly_ros/resource/phong-shading.f.glsl");
     }
     else
     {
-        std::strcpy(v_shader_filename, "/home/jack/catkin_ws/cube.v.glsl");
-        std::strcpy(f_shader_filename, "/home/jack/catkin_ws/cube.f.glsl");
+        std::strcpy(v_shader_filename, "/home/jack/code_test2/catkinws2/src/object_assembly_ros/resource/textured-cube.v.glsl");
+        std::strcpy(f_shader_filename, "/home/jack/code_test2/catkinws2/src/object_assembly_ros/resource/textured-cube.f.glsl");
     }
 
     if (init_resources(v_shader_filename, f_shader_filename)) {
@@ -349,3 +352,5 @@ int BaseUI::gui_main(int argc, char* argv[]) {
     free_resources();
     return 0;
 }
+
+#endif //BASE_UI_HPP 

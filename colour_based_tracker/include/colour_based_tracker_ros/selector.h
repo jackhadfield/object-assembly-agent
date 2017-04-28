@@ -66,12 +66,12 @@ public:
         }
     }
 
-    int calculate_ranges(Mat HSV, std::vector<Mat>& means, std::vector<Mat>& stds)
+    int calculate_ranges(Mat HSV, std::vector<Mat>& means, std::vector<Mat>& stds, Mat& mask)
     {//int buffer; std::cin >> buffer;
         for (int i=ranges_calculated_; i<m_selections.size(); i++)
         {
             Mat mean, std;
-            meanStdDev(HSV(m_selections[i]), mean, std);std::cout<<mean;std::cout<<std;
+            meanStdDev(HSV(m_selections[i]), mean, std, mask(m_selections[i]));std::cout<<mean;std::cout<<std;
             means_.push_back(mean);
             stds_.push_back(std);
         }
