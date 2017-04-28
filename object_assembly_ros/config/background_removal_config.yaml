@@ -20,3 +20,5 @@ crop_depth_image:
 #crop depth image, using above parameters, for table detection
 crop_for_table_detection: true
 
+show_table_mask: false
+

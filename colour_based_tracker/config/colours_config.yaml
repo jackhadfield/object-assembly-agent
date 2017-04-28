@@ -4,15 +4,15 @@
 #max number of objects to be detected in frame
 MAX_NUM_OBJECTS: 50
 #minimum and maximum object area to be accepted
-MIN_OBJECT_AREA: 50 #100
+MIN_OBJECT_AREA: 20 #100
 MAX_OBJECT_AREA: 204800
 #(FRAME_HEIGHT*FRAME_WIDTH / 1.5)
 erode_size: 2 #3
 dilate_size: 4 #8
 
-crop_range: [205, 71, 205, 141] #in pixel values (make sure these match the values in
+crop_range: [120, 118, 267, 236] #in pixel values (make sure these match the values in
                                 #image_crop_config.yaml, divided by the resize coefficients)
-resize_coefficients: [3.75, 2.547] #Match to depth image size used by tracker (before downsampling). [3.75, 2.547] for SD -> HD
+resize_coefficients: [3.75, 2.547] #[x,y]:  Match to depth image size used by tracker (before downsampling). [3.75, 2.547] for SD -> HD
 particle_filter_downsampling: 4 #Downsampling ratio used by tracker
 
 show_rgb: true
@@ -20,21 +20,27 @@ show_hsv: false
 show_threshold: false
 use_trackbars: false
 smooth_estimate: false
-interactive_hsv_ranges: true #calculate hsv ranges by selecting areas on the screen (click and drag)
+interactive_hsv_ranges: false #calculate hsv ranges by selecting areas on the screen (click and drag)
 camera_topic: /kinect2/sd/image_color_rect
+rgb_camera_info_topic: /kinect2/sd/camera_info
+depth_camera_info_topic: /image_crop/newCameraInfo
 #camera_topic: /webcam/image_raw
-#number_of_objects: 4
+number_of_objects: 5
+std_coefficient: 1.8
 
 objects:
     object1:
-        name: 'Green Box'
-        hsv_range: [86,97,93,175,86,256] #webcam: [62,78,53,117,133,238]
+        name: 'Blue Box'
+        hsv_range: [102, 112, 190, 243, 135, 180] #[107, 113, 195, 240, 89, 117]
     object2:
-        name: 'Orange Box'
-        hsv_range: [0,10,11,42,0,256] #webcam: [2,23,81,133,133,256]
+        name: 'Green Box'
+        hsv_range: [65, 72, 133, 195, 75, 139] 
     object3:
-        name: 'White Box'
-        hsv_range: [88,104,16,105,207,256] #first bag-first try:[89,97,44,79,0,256] #webcam:[84,167,15,57,133,256]
+        name: 'Purple Box'
+        hsv_range: [113, 125, 120, 217, 42, 87] #[114, 118, 162, 227, 38, 52]
     object4:
+        name: 'Red Box'
+        hsv_range: [165, 178, 200, 258, 152, 186] 
+    object5:
         name: 'Yellow Box'
-        hsv_range: [76,86,15,41,35,256] #(for erode:1). Previously: [66,81,33,49,200,256] #[65,87,36,57,0,256] #webcam: [32,60,65,93,172,256]
+        hsv_range: [21, 34, 143, 180, 140, 255] 

@@ -14,6 +14,10 @@ number_of_checks: 2
 
 number_of_subtasks: 3
 
+# distance score parameters
+N: 8
+ymax: 100
+
 subtasks:
   #subtask 1 translates to "place object 1 on object 2"
   subtask1:
