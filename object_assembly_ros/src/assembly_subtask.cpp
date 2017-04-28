@@ -2,6 +2,40 @@
 //TODO rotate desired relative pose, not received poses, to save time
 //TODO fix second_rotation (currently only works if desired rotation is zero)
 
+void print_transform(tf::Transform t)
+{
+    std::cout << t.getBasis().getRow(0).x() << " " << t.getBasis().getRow(0).y() << " " << t.getBasis().getRow(0).z() << " " << t.getOrigin().x() << "\n";
+    std::cout << t.getBasis().getRow(1).x() << " " << t.getBasis().getRow(1).y() << " " << t.getBasis().getRow(1).z() << " " << t.getOrigin().y() << "\n";
+    std::cout << t.getBasis().getRow(2).x() << " " << t.getBasis().getRow(2).y() << " " << t.getBasis().getRow(2).z() << " " << t.getOrigin().z() << "\n";
+    std::cout << "0.0 0.0 0.0 1.0\n";
+}
+
+void print_quaternion(tf::Quaternion q)
+{
+    std::cout << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
+}
+
+void print_vector3(tf::Vector3 v)
+{
+    std::cout << v.x() << " " << v.y() << " " << v.z() << "\n";
+}
+
+void print_transform(std::string text, tf::Transform t)
+{
+    std::cout << text;
+    print_transform(t);
+}
+
+void print_quaternion(std::string text, tf::Quaternion q)
+{
+    std::cout << text << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
+}
+
+void print_vector3(std::string text, tf::Vector3 v)
+{
+    std::cout << text << v.x() << " " << v.y() << " " << v.z() << "\n";
+}
+
 AssemblySubtask::AssemblySubtask(
     int id,
     int num_checks,
@@ -13,7 +47,10 @@ AssemblySubtask::AssemblySubtask(
     std::vector<double> margin,
     std::string connection_type,
     std::vector<std::string> object_symmetries,
-    tf::Vector3 up_vector)
+    int max_particles,
+    tf::Vector3 up_vector,
+    int N,
+    double ymax)
     : subtask_id_(id),
       num_checks_(num_checks),
       first_object_(first_object),
@@ -23,10 +60,13 @@ AssemblySubtask::AssemblySubtask(
       relative_orientation_(relative_orientation),
       margin_(margin),
       connection_type_(connection_type),
-      up_vector_(up_vector)
+      max_particles_(max_particles),
+      up_vector_(up_vector.normalized()),
+      N_(N),
+      ymax_(ymax)
 {
     //relativeXZ_ = tf::Vector3(relative_position_.getX(), relative_position_.getY(), 0);
-    relativeY_ = tf::Vector3(0, 0, relative_position_.getY());
+    relativeY_ = tf::Vector3(0, relative_position_.getY(), 0);
     relativeXZ_sorted_ = relative_position_.absolute();
     sort_vector3(relativeXZ_sorted_);
 
@@ -62,11 +102,27 @@ AssemblySubtask::AssemblySubtask(
     connection_pose.position.x = relative_pos_table_frame_.x();
     connection_pose.position.y = relative_pos_table_frame_.y();
     connection_pose.position.z = relative_pos_table_frame_.z();
-    relative_rot_table_frame_ = down_vector_to_y * relative_orientation_;
+    relative_rot_table_frame_ = relative_orientation_; //down_vector_to_y * relative_orientation_;
     connection_pose.orientation.x = relative_rot_table_frame_.x();
     connection_pose.orientation.y = relative_rot_table_frame_.y();
     connection_pose.orientation.z = relative_rot_table_frame_.z();
     connection_pose.orientation.w = relative_rot_table_frame_.w();
+    
+    global_to_table_ = tf::Transform::getIdentity();
+    global_to_table_.setRotation(tf::Quaternion(rot_axis_, rot_angle_));
+print_quaternion("Test: ", down_vector_to_y);
+std::cout << "up_vector_: " << up_vector_.x() <<" "<<up_vector_.y()<<" "<<up_vector_.z() <<"\n";
+std::cout << "rot_axis_: " << rot_axis_.x() <<" "<<rot_axis_.y()<<" "<<rot_axis_.z() <<"\n";
+std::cout << rot_angle_ << "\n";
+
+    for (int i = 0; i < 24; i++)
+    {
+        tf::Quaternion temp(cubic_rotations[4*i],cubic_rotations[4*i+1],cubic_rotations[4*i+2],cubic_rotations[4*i+3]);
+        cubic_rotation_quaternions_.push_back(temp);
+        cubic_relative_positions_.push_back(relative_position_.rotate(temp.getAxis(), temp.getAngle()));
+        cubic_relative_positions_normalized_.push_back(cubic_relative_positions_[i].normalized());
+        print_vector3("cubic_relative_positions_normalized_\n",cubic_relative_positions_normalized_[i]);
+    }
 }
 
 bool AssemblySubtask::evaluate_subtask(
@@ -163,8 +219,10 @@ bool AssemblySubtask::evaluate_any(tf::Transform &first_object_pose,
     }
 }
 
-void AssemblySubtask::sort_vector3(tf::Vector3 &v)
+/* Returns number of permutations performed */
+int AssemblySubtask::sort_vector3(tf::Vector3 &v)
 {
+    int perms = 0;
     double temp, x, y, z;
     x = v.getX();
     y = v.getY();
@@ -174,22 +232,26 @@ void AssemblySubtask::sort_vector3(tf::Vector3 &v)
         temp = x;
         x = z;
         z = temp;
+        ++perms;
     }
     if (x > y)
     {
         temp = x;
         x = y;
         y = temp;
+        ++perms;
     }
     if (y > z)
     {
         temp = y;
         y = z;
         z = temp;
+        ++perms;
     }
     v.setX(x);
     v.setY(y);
     v.setZ(z);
+    return perms;
 }
 
 bool AssemblySubtask::evaluate_no_symmetry(
@@ -211,33 +273,37 @@ bool AssemblySubtask::evaluate_no_symmetry(
                                          margin_[1],
                                          margin_[2],
                                          position_score1);
-
+//print_vector3("position_diff1\n",position_diff1);
     tf::Transform rotated_second_object_pose = second_object_pose *
                                                tf::Transform(prerotation2_, tf::Vector3(0.0, 0.0, 0.0));
     tf::Transform t12(rotated_second_object_pose);
     t12 = t12.inverseTimes(first_object_pose);
-    tf::Vector3 position_diff2 = t12.getOrigin();
+    tf::Vector3 position_diff2 = t12.getOrigin().rotate(relative_orientation_.getAxis(), relative_orientation_.getAngle());
     position_check2 = compare_tf_vectors(-relative_position_,
                                          position_diff2,
                                          margin_[0],
                                          margin_[1],
                                          margin_[2],
                                          position_score2);
-
-    score = position_score1 * orientation_score;
+//print_vector3("position_diff2\n",position_diff2);
+    set_connection_pose();
+    score = position_score1; // * orientation_score);
     return position_check1 && position_check2 && orientation_check;
 }
 
+/*
 bool AssemblySubtask::evaluate_cubic_cubic(
                                   tf::Transform &first_object_pose,
                                   tf::Transform &second_object_pose,
                                   double &score)
 {
     bool positionXZ_check, positionY_check, orientation_check = true;
-    double positionXZ_score, positionY_score, orientation_score = 1;
-
-    tf::Transform t21(first_object_pose);
-    t21 = t21.inverseTimes(second_object_pose);
+    double positionXZ_score, positionY_score, orientation_score = 1.0;
+//print_transform("first_object_pose:\n", first_object_pose);
+//print_transform("global_to_table_:\n", global_to_table_);
+//print_transform("global_to_table_*first_object_pose:\n", global_to_table_*first_object_pose);
+    tf::Transform t21(global_to_table_*first_object_pose);
+    t21 = t21.inverseTimes(global_to_table_*second_object_pose);
     tf::Vector3 position_diff = t21.getOrigin();
     tf::Vector3 sorted_position_diff = position_diff.absolute();
     sort_vector3(sorted_position_diff);
@@ -254,16 +320,21 @@ bool AssemblySubtask::evaluate_cubic_cubic(
     tf::Vector3 second_pos = second_object_pose.getOrigin();
     second_pos.rotate(rot_axis_, rot_angle_);
     positionY_check = compare_tf_vectors(relativeY_,
-                                        tf::Vector3(0, 0, second_pos.getY() - first_pos.getY()),
+                                        tf::Vector3(0, second_pos.getY() - first_pos.getY(), 0),
                                         margin_[0],
                                         margin_[1],
                                         margin_[2],
                                         positionY_score);
 
-    if (positionXZ_score * positionY_score >= 1.0/max_particles_)
+    if (positionXZ_score >= 1.0/max_particles_)
     {
+
+std::cout << subtask_id_ << ": " << position_diff.x() << " " << position_diff.y() << " " << position_diff.z() << "\n";
+std::cout << "Desired: " << relative_position_.x() << " " << relative_position_.y() << " " << relative_position_.z() << "\n";
         tf::Vector3 down_vector_in_frame;
         down_vector_in_frame = first_object_pose.inverse() * tf::Vector3(0.0, 1.0, 0.0) - first_object_pose.inverse().getOrigin();
+        tf::Vector3 zero_one_zero(0.0, 1.0, 0.0);
+        //down_vector_in_frame = first_object_pose.inverse() * (-up_vector_) - first_object_pose.inverse().getOrigin();
         if (std::abs(relative_position_.angle(position_diff) - M_PI) < 0.001)
         {
             double x = relative_position_.getX();
@@ -294,22 +365,111 @@ bool AssemblySubtask::evaluate_cubic_cubic(
             down_vector_in_frame = down_vector_in_frame.rotate(position_diff.cross(relative_position_).normalized(), position_diff.angle(relative_position_));
 
         }
-        if (std::abs(down_vector_in_frame.angle(-up_vector_) - M_PI) < 0.001)
+        if (std::abs(down_vector_in_frame.angle(zero_one_zero) - M_PI) < 0.001)
         {
             first_rotation = tf::Quaternion(relative_position_, M_PI) * first_rotation;
         }
-        else if (!std::abs(down_vector_in_frame.angle(-up_vector_)) < 0.001)
+        else if (!std::abs(down_vector_in_frame.angle(zero_one_zero)) < 0.001)
         {
-            first_rotation = tf::Quaternion(down_vector_in_frame.cross(-up_vector_), down_vector_in_frame.angle(-up_vector_)) * first_rotation;
+            first_rotation = tf::Quaternion(down_vector_in_frame.cross(zero_one_zero), down_vector_in_frame.angle(zero_one_zero)) * first_rotation;
         }        
         first_rotation = round_quaternion_90(first_rotation);
         second_rotation = round_quaternion_90(t21.getRotation());
         set_connection_pose();
     }
 
-    score = positionXZ_score * positionY_score * orientation_score;//std::cout << "calculated score: " << score << "\n";
+    score = positionXZ_score;// + positionY_score); // * orientation_score;//std::cout << "calculated score: " << score << "\n";
     return positionXZ_check && positionY_check && orientation_check;
 }
+*/
+
+bool AssemblySubtask::evaluate_cubic_cubic(
+                                  tf::Transform &first_object_pose,
+                                  tf::Transform &second_object_pose,
+                                  double &score)
+{
+    bool positionXZ_check, positionY_check, orientation_check = true;
+    double positionXZ_score, positionY_score, orientation_score = 1.0;
+
+    tf::Transform t21(global_to_table_*first_object_pose);
+    t21 = t21.inverseTimes(global_to_table_*second_object_pose);
+    tf::Vector3 position_diff = t21.getOrigin();
+//print_vector3("CCposition_diff\n",position_diff);
+//print_quaternion("CCfirst_object_rot\n",first_object_pose.getRotation());
+//print_quaternion("CCsecond_object_rot\n",second_object_pose.getRotation());
+//print_vector3("CCfirst_object_pos\n",first_object_pose.getOrigin());
+//print_vector3("CCsecond_object_pos\n",second_object_pose.getOrigin());
+    double max_dot_prod = std::numeric_limits<double>::lowest();
+    int max_index = 0;
+    for (int i = 0; i < 24; i++)
+    {
+        double dot_prod = position_diff.x() * cubic_relative_positions_normalized_[i].x() + 
+                          position_diff.y() * cubic_relative_positions_normalized_[i].y() + 
+                          position_diff.z() * cubic_relative_positions_normalized_[i].z();
+        if (dot_prod > max_dot_prod)
+        {
+            max_dot_prod = dot_prod;
+            max_index = i;
+        }
+    }
+//std::cout << "Index: " << max_index << "\n";
+    positionXZ_check = compare_tf_vectors(cubic_relative_positions_[max_index],
+                                          position_diff,
+                                          margin_[0],
+                                          margin_[1],
+                                          margin_[2],
+                                          positionXZ_score);
+
+    tf::Vector3 first_pos = first_object_pose.getOrigin();
+    first_pos.rotate(rot_axis_, rot_angle_);
+    tf::Vector3 second_pos = second_object_pose.getOrigin();
+    second_pos.rotate(rot_axis_, rot_angle_);
+    positionY_check = compare_tf_vectors(relativeY_,
+                                        tf::Vector3(0, second_pos.getY() - first_pos.getY(), 0),
+                                        margin_[0],
+                                        margin_[1],
+                                        margin_[2],
+                                        positionY_score);
+
+    //if (positionXZ_score >= 1.0/max_particles_)
+    //{
+
+//std::cout << subtask_id_ << ": "; print_vector3(position_diff);
+//print_vector3("Desired: ", relative_position_);
+        tf::Vector3 down_vector_in_frame;// = -up_vector_;
+        
+        //tf::Vector3 zero_one_zero(0.0, 1.0, 0.0);
+        //down_vector_in_frame = first_object_pose.inverse() * (-up_vector_) - first_object_pose.inverse().getOrigin();
+        first_rotation = cubic_rotation_quaternions_[max_index].inverse();
+    //tf::Transform temp = tf::Transform(first_rotation, tf::Vector3(0,0,0)) * first_object_pose;
+        down_vector_in_frame = (global_to_table_*first_object_pose).inverse() * (tf::Vector3(0.0, 1.0, 0.0)) - (global_to_table_*first_object_pose).inverse().getOrigin(); //WAS *tf::Vector3(0.0, 1.0, 0.0)
+//print_vector3("down_vector_in_frame: ", down_vector_in_frame);
+//print_quaternion("first_rotation: ", first_rotation);
+//print_vector3("pos dif rotated: ", position_diff.rotate(first_rotation.getAxis(),first_rotation.getAngle()));
+        down_vector_in_frame = down_vector_in_frame.rotate(first_rotation.getAxis(), first_rotation.getAngle());
+//print_vector3("rotated down_vector_in_frame: ", down_vector_in_frame);
+        if (std::abs(down_vector_in_frame.angle(tf::Vector3(0.0, 1.0, 0.0)) - M_PI) < 0.001)
+        {
+            first_rotation = tf::Quaternion(relative_position_, M_PI) * first_rotation; //WAS relative_position_
+        }
+        else if (!std::abs(down_vector_in_frame.angle(tf::Vector3(0.0, 1.0, 0.0))) < 0.001)
+        {
+            first_rotation = tf::Quaternion(down_vector_in_frame.cross(tf::Vector3(0.0, 1.0, 0.0)), down_vector_in_frame.angle(tf::Vector3(0.0, 1.0, 0.0))) * first_rotation;
+        }        
+//std::cout << "first_rotation: " << first_rotation.x() << " " << first_rotation.y() << " " << first_rotation.z() << " " << first_rotation.w() << "\n";
+
+//std::cout << "angle: " << down_vector_in_frame.angle(-up_vector_) << "\n";
+        first_rotation = round_quaternion_90(first_rotation);
+//std::cout << "first_rotation: " << first_rotation.x() << " " << first_rotation.y() << " " << first_rotation.z() << " " << first_rotation.w() << "\n";
+        second_rotation = round_quaternion_90(t21.getRotation());
+        set_connection_pose();
+    //}
+
+    score = positionXZ_score;// + positionY_score); // * orientation_score;//std::cout << "calculated score: " << score << "\n";
+    return positionXZ_check;// && positionY_check && orientation_check;
+//TODO fix positionY_check
+}
+
 
 bool AssemblySubtask::evaluate_cubic_none(
                                   tf::Transform &first_object_pose,
@@ -325,7 +485,13 @@ bool AssemblySubtask::evaluate_cubic_none(
     t21 = t21.inverseTimes(first_object_pose);
 
     tf::Vector3 position_diff = t21.getOrigin();
-
+//print_vector3("rel_pos\n",-relative_position_);
+//print_vector3("position_diff\n",position_diff);
+//print_quaternion("prerotation_\n",prerotation_);
+//print_quaternion("first_object_rot\n",first_object_pose.getRotation());
+//print_quaternion("second_object_rot\n",second_object_pose.getRotation());
+//print_vector3("first_object_pos\n",first_object_pose.getOrigin());
+//print_vector3("second_object_pos\n",second_object_pose.getOrigin());
     position_check = compare_tf_vectors(-relative_position_,
                                           position_diff,
                                           margin_[0],
@@ -335,14 +501,14 @@ bool AssemblySubtask::evaluate_cubic_none(
 
     if (position_score >= 1.0/max_particles_)
     {
-        first_rotation = second_object_pose.inverseTimes(first_object_pose).getRotation();
+        first_rotation = round_quaternion_90(second_object_pose.inverseTimes(first_object_pose).getRotation());
         set_connection_pose();
     }
 
-    orientation_score = 1;
+    orientation_score = 1.0;
     orientation_check = true;
-    score = position_score * positionY_score * orientation_score;
-    return position_check && positionY_check && orientation_check;
+    score = position_score; // * positionY_score); // * orientation_score;
+    return position_check;// && positionY_check && orientation_check;
 }
 
 bool AssemblySubtask::evaluate_none_cubic(
@@ -360,7 +526,9 @@ bool AssemblySubtask::evaluate_none_cubic(
     t21 = t21.inverseTimes(second_object_pose);
 
     tf::Vector3 position_diff = t21.getOrigin();
-
+//print_vector3("rel_pos\n",-relative_position_);
+//print_vector3("position_diff\n",position_diff);
+//print_quaternion("prerotation_\n",prerotation_);
     position_check = compare_tf_vectors(relative_position_,
                                         position_diff,
                                         margin_[0],
@@ -369,14 +537,14 @@ bool AssemblySubtask::evaluate_none_cubic(
                                         position_score);
     if (position_score >= 1.0/max_particles_)
     {
-        second_rotation = first_object_pose.inverseTimes(second_object_pose).getRotation();
+        second_rotation = round_quaternion_90(first_object_pose.inverseTimes(second_object_pose).getRotation());
         set_connection_pose();
     }
 
-    orientation_score = 1;
+    orientation_score = 1.0;
     orientation_check = true;
-    score = position_score * positionZ_score * orientation_score;
-    return position_check && positionZ_check && orientation_check;
+    score = position_score; // * positionZ_score); // * orientation_score;
+    return position_check;// && positionZ_check && orientation_check;
 }
 
 bool AssemblySubtask::compare_tf_vectors(tf::Vector3 v1,
@@ -386,10 +554,8 @@ bool AssemblySubtask::compare_tf_vectors(tf::Vector3 v1,
                                          double z_margin,
                                          double &score)
 {
-    const static int N = 8;
-    const static double ymax = 100;
     const static double sqrt3 = 1.732050808;
-    score = std::min(1.0, sqrt3/std::sqrt( ((ymax-1)/(N*N-1)) * (pow((v1.getX() - v2.getX())/(x_margin), 2) + pow((v1.getY() - v2.getY())/(y_margin), 2) + pow((v1.getZ() - v2.getZ())/(z_margin), 2) ) + 3*(N*N-ymax)/(N*N-1) ) );
+    score = std::min(1.0, sqrt3/std::sqrt( ((ymax_-1)/(N_*N_-1)) * (pow((v1.getX() - v2.getX())/(x_margin), 2) + pow((v1.getY() - v2.getY())/(y_margin), 2) + pow((v1.getZ() - v2.getZ())/(z_margin), 2) ) + 3*(N_*N_-ymax_)/(N_*N_-1) ) );
 //std::cout << "v1: " << v1.getX() << " " << v1.getY() << " " << v1.getZ() << "\n";
 //std::cout << "v2: " << v2.getX() << " " << v2.getY() << " " << v2.getZ() << "\n";
     return (std::abs(v1.getX() - v2.getX()) < x_margin &&
@@ -416,6 +582,16 @@ void AssemblySubtask::set_second_object_symmetry(std::string new_type)
     second_object_symmetry_ = new_type;
 }
 
+std::string AssemblySubtask::get_first_object_symmetry()
+{
+    return first_object_symmetry_;
+}
+
+std::string AssemblySubtask::get_second_object_symmetry()
+{
+    return second_object_symmetry_;
+}
+
 void AssemblySubtask::set_prerotation(tf::Quaternion rotation)
 {
     //prerotation_ = tf::Quaternion::getIdentity();
@@ -432,6 +608,7 @@ tf::Quaternion AssemblySubtask::round_quaternion_90(tf::Quaternion rotation)
 {
     double x, y, z, w;
 //std::cout << "was: " << rotation.x() << " " << rotation.y() << " " <<rotation.z() << " " <<rotation.w() << "\n";
+/*
     if (std::abs(rotation.x()) < 0.25)
         x = 0.0;
     else if (rotation.x() > 0.0)
@@ -515,6 +692,24 @@ tf::Quaternion AssemblySubtask::round_quaternion_90(tf::Quaternion rotation)
         else
             w = -1.0;
     }
+*/
+
+    double max_dot_prod = -4; //std::numeric_limits<double>::infinity();
+    int max_index = 0;
+    for (int i = 0; i < 24; i++)
+    {
+        double dot_prod = std::abs(cubic_rotations[4*i]*rotation.x() + cubic_rotations[4*i+1]*rotation.y() + 
+                          cubic_rotations[4*i+2]*rotation.z() + cubic_rotations[4*i+3]*rotation.w());
+        if (dot_prod > max_dot_prod)
+        {
+            max_dot_prod = dot_prod;
+            max_index = i;
+        }
+    }
+    x = cubic_rotations[4*max_index];
+    y = cubic_rotations[4*max_index+1];
+    z = cubic_rotations[4*max_index+2];
+    w = cubic_rotations[4*max_index+3];
 
     tf::Quaternion rounded_rotation(x, y, z, w);
     rounded_rotation.normalize();
@@ -525,7 +720,7 @@ tf::Quaternion AssemblySubtask::round_quaternion_90(tf::Quaternion rotation)
 void AssemblySubtask::set_connection_pose()
 {
     tf::Vector3 rotated_relative_pos;
-    //tf::Quaternion rotated_relative_rot;
+    tf::Quaternion rotated_relative_rot;
 
     if (first_object_symmetry_ == "cubic" &&
             second_object_symmetry_ == "cubic")
@@ -533,37 +728,36 @@ void AssemblySubtask::set_connection_pose()
         //std::cout << "relative_pos_table_frame_: " << relative_pos_table_frame_.x() << " " << relative_pos_table_frame_.y() << " " << relative_pos_table_frame_.z() << "\n";
         tf::Quaternion first_inverted = first_rotation.inverse();
         //std::cout << "first_inverted: " << first_inverted.x() << " " << first_inverted.y() << " " << first_inverted.z() << " " << first_inverted.w() << "\n";
-        rotated_relative_pos = relative_pos_table_frame_.rotate(first_inverted.getAxis(), first_inverted.getAngle());
+        rotated_relative_pos = relative_position_.rotate(first_inverted.getAxis(), first_inverted.getAngle());
         //std::cout << "rotated_relative_pos: " << rotated_relative_pos.x() << " " << rotated_relative_pos.y() << " " << rotated_relative_pos.z() << "\n";
-        //rotated_relative_rot = second_rotation;
+        rotated_relative_rot = second_rotation;
     }
     else if (first_object_symmetry_ == "none" &&
             second_object_symmetry_ == "cubic")
     {
-        rotated_relative_pos = relative_pos_table_frame_.rotate(prerotation_.getAxis(), prerotation_.getAngle());
+        rotated_relative_pos = relative_position_.rotate(prerotation_.getAxis(), prerotation_.getAngle());
+        rotated_relative_rot = second_rotation;
     }
     else if (first_object_symmetry_ == "cubic" &&
             second_object_symmetry_ == "none")
     {
         tf::Quaternion first_inverted = first_rotation.inverse();
-        rotated_relative_pos = relative_pos_table_frame_.rotate(first_inverted.getAxis(), first_inverted.getAngle());
+        rotated_relative_pos = relative_position_.rotate((first_inverted*prerotation_).getAxis(), (first_inverted*prerotation_).getAngle());
+        rotated_relative_rot = first_inverted;
     }
     else
     {
-        rotated_relative_pos = relative_pos_table_frame_.rotate(prerotation1_.getAxis(), prerotation1_.getAngle());
+        rotated_relative_pos = relative_position_.rotate(prerotation1_.getAxis(), prerotation1_.getAngle());
+        rotated_relative_rot = prerotation1_ * prerotation2_.inverse() * relative_orientation_; //TODO
     }
-
-    
-    
-
 
     connection_pose.position.x = rotated_relative_pos.x();
     connection_pose.position.y = rotated_relative_pos.y();
     connection_pose.position.z = rotated_relative_pos.z();
 
-    //connection_pose.orientation.x = rotated_relative_rot.x();
-    //connection_pose.orientation.y = rotated_relative_rot.y();
-    //connection_pose.orientation.z = rotated_relative_rot.z();
-    //connection_pose.orientation.w = rotated_relative_rot.w();
+    connection_pose.orientation.x = rotated_relative_rot.x();
+    connection_pose.orientation.y = rotated_relative_rot.y();
+    connection_pose.orientation.z = rotated_relative_rot.z();
+    connection_pose.orientation.w = rotated_relative_rot.w();
 
 }

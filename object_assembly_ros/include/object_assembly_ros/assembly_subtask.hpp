@@ -1,3 +1,6 @@
+#ifndef ASSEMBLY_SUBTASK_HPP_
+#define ASSEMBLY_SUBTASK_HPP_
+
 #include <vector>
 #include <iostream>
 #include <string>
@@ -8,6 +11,31 @@
 #include <object_assembly_msgs/ConnectionInfoList.h>
 #include <object_assembly_msgs/ConnectionVector.h>
 
+
+const double cubic_rotations[96] = {0,0,0,1,//0
+                                    1,0,0,0,
+                                    0,1,0,0,
+                                    0,0,1,0,
+                                    0.7071,0.7071,0,0,//4
+                                    0.7071,0,0.7071,0,
+                                    0.7071,0,0,0.7071,
+                                    0,0.7071,0.7071,0,
+                                    0,0.7071,0,0.7071,//8
+                                    0,0,0.7071,0.7071,
+                                    -0.7071,0.7071,0,0,
+                                    -0.7071,0,0.7071,0,
+                                    -0.7071,0,0,0.7071,//12
+                                    0,-0.7071,0.7071,0,
+                                    0,-0.7071,0,0.7071,
+                                    0,0,-0.7071,0.7071,
+                                    0.5,0.5,0.5,0.5,//16
+                                    -0.5,0.5,0.5,0.5,
+                                    0.5,-0.5,0.5,0.5,
+                                    0.5,0.5,-0.5,0.5,
+                                    -0.5,-0.5,-0.5,0.5,//20
+                                    -0.5,-0.5,0.5,0.5,
+                                    -0.5,0.5,-0.5,0.5,
+                                    0.5,-0.5,-0.5,0.5};
 
 class AssemblySubtask
 {
@@ -23,7 +51,10 @@ public:
                     std::vector<double> margin,
     		        std::string connection_type,
                     std::vector<std::string> object_symmetries,
-                    tf::Vector3 up_vector);
+                    int max_particles,
+                    tf::Vector3 up_vector,
+                    int N,
+                    double ymax);
 
     bool evaluate_subtask(
         std::vector<tf::Transform> &current_object_poses,
@@ -53,12 +84,16 @@ public:
 
     void set_second_object_symmetry(std::string new_type);
 
+    std::string get_first_object_symmetry();
+
+    std::string get_second_object_symmetry();
+
     void set_prerotation(tf::Quaternion rotation);
 
     void set_prerotations(tf::Quaternion rotation1, tf::Quaternion rotation2);
 
 private:
-    void sort_vector3(tf::Vector3 &v);
+    int sort_vector3(tf::Vector3 &v);
 
     bool evaluate_any(tf::Transform &first_object_pose,
                       tf::Transform &second_object_pose,
@@ -96,10 +131,13 @@ private:
     const int subtask_id_; //starting at 0
     bool subtask_complete_ = false;
     const int num_checks_;
-    int checks_ = 0;
+    int checks_;
     int first_object_;
     int second_object_;
-    int max_particles_ = 5; //TODO initialize
+    int max_particles_; //TODO initialize
+
+    const int N_;
+    const double ymax_;
     
     std::string connection_type_;
 
@@ -111,6 +149,10 @@ private:
     tf::Vector3 relative_pos_table_frame_;
     tf::Quaternion relative_rot_table_frame_;
 
+    std::vector<tf::Vector3> cubic_relative_positions_;
+    std::vector<tf::Vector3> cubic_relative_positions_normalized_;
+    std::vector<tf::Quaternion> cubic_rotation_quaternions_;
+
     //margin[0,1,2]: position margin, margin[3,4,5,6]: orientation margin
     std::vector<double> margin_;
 
@@ -119,9 +161,26 @@ private:
 
     //Rotation of 1st or 2nd part to conform to other parts of subgraph 
     //(set before calling evaluate_subtask if needed)
-    tf::Quaternion prerotation_, prerotation1_, prerotation2_;
+    tf::Quaternion prerotation_ = tf::Quaternion(0.0, 0.0, 0.0, 1.0);
+    tf::Quaternion prerotation1_ = tf::Quaternion(0.0, 0.0, 0.0, 1.0);
+    tf::Quaternion prerotation2_ = tf::Quaternion(0.0, 0.0, 0.0, 1.0);
     tf::Vector3 up_vector_;
     tf::Vector3 rot_axis_;
     double rot_angle_;
+    tf::Transform global_to_table_;
 
 };
+
+void print_transform(tf::Transform t);
+
+void print_quaternion(tf::Quaternion q);
+
+void print_vector3(tf::Vector3 v);
+
+void print_transform(std::string text, tf::Transform t);
+
+void print_quaternion(std::string text, tf::Quaternion q);
+
+void print_vector3(std::string text, tf::Vector3 v);
+
+#endif //ASSEMBLY_SUBTASK_HPP_
